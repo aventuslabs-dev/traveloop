@@ -15,6 +15,11 @@ import type { PassKey } from "./passes";
  * produced here is a quote the customer settles at the venue.
  */
 
+import type { Locale } from "@/i18n/config";
+import { htmlLang } from "@/i18n/config";
+import { phrases } from "./phrases";
+import { experienceCopyCn, type ExperienceCopy } from "./cn/experiences";
+
 export type ExperienceKey = "lion-dance" | "batik" | "indian-culture" | "photography";
 
 export const EXPERIENCE_CURRENCY = "MYR";
@@ -45,9 +50,29 @@ export type ExperiencePackage = {
   note?: string;
 };
 
+/**
+ * A flat-rate pack offered alongside per-person pricing: one price covering up
+ * to `includedParticipants`, plus a flat rate for every person beyond that.
+ *
+ * A pack price is already the pass-holder rate, so no tier discount is applied
+ * on top and every entitled tier pays the same for it. The customer chooses
+ * between the pack and the per-person rate on the booking form.
+ */
+export type ExperienceGroupPack = {
+  key: string;
+  label: string;
+  baseGroupCents: number;
+  includedParticipants: number;
+  extraPersonCents: number;
+  note?: string;
+};
+
+/** The `packageKey` standing for "no pack taken — priced per person". */
+export const PER_PERSON_PRICE_KEY = "per-person";
+
 export type ExperiencePricing =
-  /** One regular price per participant. */
-  | { mode: "per-person"; basePerPersonCents: number }
+  /** One regular price per participant, optionally with a flat-rate pack alongside. */
+  | { mode: "per-person"; basePerPersonCents: number; groupPack?: ExperienceGroupPack }
   /**
    * A group package covering up to `includedParticipants` people, with each
    * person beyond that charged `extraPersonCents`.
@@ -67,7 +92,13 @@ export type ExperiencePricing =
    * Fixed packages the customer chooses between. These are already the
    * pass-holder price, so no tier discount is applied on top.
    */
-  | { mode: "packages"; options: ExperiencePackage[] };
+  | { mode: "packages"; options: ExperiencePackage[] }
+  /**
+   * Covered by the pass itself: nothing is payable for the session, and
+   * anything beyond what it includes is sold at the session rather than booked
+   * here. `label` is the single line the quote shows.
+   */
+  | { mode: "included"; label: string };
 
 export type ExperienceLocationOption = {
   value: string;
@@ -130,8 +161,19 @@ export const experiences: Experience[] = [
       { weekday: 4, startMinutes: 20 * HOUR, endMinutes: 22 * HOUR },
       { weekday: 0, startMinutes: 13 * HOUR, endMinutes: 15 * HOUR },
     ],
-    pricing: { mode: "per-person", basePerPersonCents: 80_000 },
-    discountByTier: { silver: 25, gold: 50, platinum: 83.75 },
+    pricing: {
+      mode: "per-person",
+      basePerPersonCents: 80_000,
+      groupPack: {
+        key: "family-pack",
+        label: "Family Pack",
+        baseGroupCents: 40_000,
+        includedParticipants: 4,
+        extraPersonCents: 10_000,
+        note: "One price for up to 4 — additional participants MYR 100 each",
+      },
+    },
+    discountByTier: { silver: 25, gold: 50, platinum: 75 },
     participants: { min: 2, max: 20, label: "Participants" },
     freeChildAgeUnder: 6,
     knowBeforeYouGo: [
@@ -200,50 +242,112 @@ export const experiences: Experience[] = [
     icon: "camera",
     image:
       "https://images.unsplash.com/photo-1596422846543-75c6fc197f07?auto=format&fit=crop&w=1000&q=85",
-    tagline: "90 minutes with a professional photographer.",
+    tagline: "90 free minutes with a professional photographer.",
     description:
-      "A private shoot around Penang's heritage streets or the Batu Ferringhi coast, with a professional photographer who knows where the light lands. Choose how many edited photos you want to keep.",
+      "A private shoot through George Town's UNESCO heritage streets with a professional photographer who knows where the light lands. Included with your Platinum Pass — you keep 5 edited photos and a 30-second video, with more available from the photographer if you want them.",
     includes: [
       "90-minute private session with a professional photographer",
       "Location scouting and posing direction throughout",
-      "Professionally edited, high-resolution digital photos",
-      "A highlight reel of the session",
+      "5 professionally edited, high-resolution digital photos",
+      "A 30-second highlight video of the session",
     ],
     durationLabel: "90 minutes",
-    venue: null,
-    venueNote: "Penang Heritage Zone or hotels in Batu Ferringhi — your photographer meets you there.",
-    locationOptions: [
-      { value: "Penang Heritage Zone", label: "Penang Heritage Zone" },
-      { value: "Hotels in Batu Ferringhi", label: "Hotels in Batu Ferringhi" },
-      { value: "Kuala Lumpur", label: "Kuala Lumpur", comingSoon: true },
-    ],
+    venue: "George Town UNESCO Heritage Zone",
+    venueNote:
+      "Your photographer meets you in the George Town UNESCO zone — the exact meeting point is confirmed after booking.",
     sessions: [
       { weekday: 6, startMinutes: 8 * HOUR + 30, endMinutes: 10 * HOUR },
       { weekday: 6, startMinutes: 10 * HOUR, endMinutes: 11 * HOUR + 30 },
     ],
-    pricing: {
-      mode: "packages",
-      options: [
-        { key: "photos-10", label: "10 digital photos", priceCents: 15_000 },
-        { key: "photos-20", label: "20 digital photos", priceCents: 25_000 },
-        {
-          key: "photos-all",
-          label: "All digital photos",
-          priceCents: 35_000,
-          note: "Includes a free Lion Dance Experience for 2 participants",
-        },
-      ],
-    },
+    pricing: { mode: "included", label: "5 edited photos + 30-second video" },
     discountByTier: { platinum: 0 },
-    participants: { min: 1, max: 20, label: "People in the shoot" },
+    participants: { min: 1, max: 7, label: "People in the shoot" },
     knowBeforeYouGo: [
       "Sessions run Saturday mornings only — the light is best before midday.",
-      "Edited photos are delivered by download link within 7 working days.",
-      "Heritage Zone shoots start from Armenian Street unless we agree otherwise.",
-      "Kuala Lumpur locations are coming soon.",
+      "Your 5 edited photos and 30-second video are delivered by download link within 7 working days.",
+      "Shoots start from Armenian Street unless we agree otherwise.",
+      "Additional edited photos from your shoot can be bought from the photographer on the day.",
     ],
   },
 ];
+
+/* ------------------------------------------------------------------ */
+/* Localized display                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The Chinese copy for an experience, or undefined for English and for
+ * anything not translated yet.
+ *
+ * Imported statically rather than lazily because `quoteBooking` is synchronous
+ * and runs in the browser as the customer changes the headcount. The file is a
+ * few kilobytes of text with no logic in it.
+ */
+function localizedCopy(key: ExperienceKey, lang: Locale): ExperienceCopy | undefined {
+  return lang === "cn" ? experienceCopyCn[key] : undefined;
+}
+
+/** The pack's own name, translated when there is a translation for it. */
+function packLabel(experience: Experience, fallback: string, lang: Locale): string {
+  return localizedCopy(experience.key, lang)?.packLabel ?? fallback;
+}
+
+/**
+ * An experience with its display text swapped for the chosen locale.
+ *
+ * Everything the booking logic reads — key, prices, sessions, discounts,
+ * participant limits — is passed through untouched, so a localized experience
+ * quotes and validates exactly like the English one.
+ */
+export function localizeExperience(experience: Experience, lang: Locale): Experience {
+  const copy = localizedCopy(experience.key, lang);
+  if (!copy) return experience;
+
+  const pricing: ExperiencePricing =
+    experience.pricing.mode === "per-person" && experience.pricing.groupPack
+      ? {
+          ...experience.pricing,
+          groupPack: {
+            ...experience.pricing.groupPack,
+            label: copy.packLabel ?? experience.pricing.groupPack.label,
+            note: copy.packNote ?? experience.pricing.groupPack.note,
+          },
+        }
+      : experience.pricing.mode === "included"
+        ? { ...experience.pricing, label: copy.includedLabel ?? experience.pricing.label }
+        : experience.pricing;
+
+  return {
+    ...experience,
+    name: copy.name ?? experience.name,
+    tagline: copy.tagline ?? experience.tagline,
+    description: copy.description ?? experience.description,
+    includes: copy.includes ?? experience.includes,
+    durationLabel: copy.durationLabel ?? experience.durationLabel,
+    venue: copy.venue ?? experience.venue,
+    venueNote: copy.venueNote ?? experience.venueNote,
+    knowBeforeYouGo: copy.knowBeforeYouGo ?? experience.knowBeforeYouGo,
+    participants: {
+      ...experience.participants,
+      label: copy.participantsLabel ?? experience.participants.label,
+    },
+    pricing,
+  };
+}
+
+/** Every experience, in display order, in one locale. */
+export function getExperiences(lang: Locale): Experience[] {
+  return experiences.map((experience) => localizeExperience(experience, lang));
+}
+
+/** Looks up a tier by key and localizes it, or undefined if the key is junk. */
+export function getLocalizedExperience(
+  key: unknown,
+  lang: Locale
+): Experience | undefined {
+  const experience = getExperience(key);
+  return experience ? localizeExperience(experience, lang) : undefined;
+}
 
 export function isExperienceKey(value: unknown): value is ExperienceKey {
   return experiences.some((experience) => experience.key === value);
@@ -345,7 +449,10 @@ export function regularPerPersonCents(experience: Experience): number | null {
 
 export type QuoteInput = {
   participants: number;
-  /** Only meaningful for `mode: "packages"` experiences. */
+  /**
+   * The chosen package, for `mode: "packages"`, or the chosen group pack, for a
+   * per-person experience that offers one. Anything else prices per person.
+   */
   packageKey?: string | null;
 };
 
@@ -357,20 +464,47 @@ export type QuoteInput = {
 export function quoteBooking(
   experience: Experience,
   discountPercent: number,
-  input: QuoteInput
+  input: QuoteInput,
+  /**
+   * Language for the *labels* only. Defaults to English so every existing
+   * server-side caller keeps its exact behaviour: the amounts this returns do
+   * not depend on it, and must not.
+   */
+  lang: Locale = "en"
 ): Quote {
+  const p = phrases(lang);
   const lines: QuoteLine[] = [];
   let regularTotalCents = 0;
 
   switch (experience.pricing.mode) {
     case "per-person": {
-      const { basePerPersonCents } = experience.pricing;
+      const { basePerPersonCents, groupPack } = experience.pricing;
+
+      // Either way the comparison price is the undiscounted per-person rate for
+      // everyone coming — that's what the booking would cost without a pass.
       regularTotalCents = basePerPersonCents * input.participants;
+
+      if (groupPack && input.packageKey === groupPack.key) {
+        const extras = Math.max(0, input.participants - groupPack.includedParticipants);
+
+        lines.push({
+          label: p.packLine(packLabel(experience, groupPack.label, lang), groupPack.includedParticipants),
+          amountCents: groupPack.baseGroupCents,
+        });
+
+        if (extras > 0) {
+          lines.push({
+            label: p.extraParticipantsLine(extras, formatPrice(groupPack.extraPersonCents)),
+            amountCents: groupPack.extraPersonCents * extras,
+          });
+        }
+        break;
+      }
+
+      const perPersonCents = applyDiscount(basePerPersonCents, discountPercent);
       lines.push({
-        label: `${input.participants} × ${formatPrice(
-          applyDiscount(basePerPersonCents, discountPercent)
-        )} per person`,
-        amountCents: applyDiscount(basePerPersonCents, discountPercent) * input.participants,
+        label: p.perPersonLine(input.participants, formatPrice(perPersonCents)),
+        amountCents: perPersonCents * input.participants,
       });
       break;
     }
@@ -385,15 +519,13 @@ export function quoteBooking(
       regularTotalCents = baseGroupCents + extraPersonCents * extras;
 
       lines.push({
-        label: `Group package (up to ${includedParticipants} participants)`,
+        label: p.groupPackageLine(includedParticipants),
         amountCents: applyDiscount(baseGroupCents, discountPercent),
       });
 
       if (extras > 0) {
         lines.push({
-          label: `${extras} additional participant${extras === 1 ? "" : "s"} × ${formatPrice(
-            extraPersonCents
-          )}`,
+          label: p.extraParticipantsLine(extras, formatPrice(extraPersonCents)),
           amountCents: extraPersonCents * extras,
         });
       }
@@ -409,6 +541,17 @@ export function quoteBooking(
       // to discount and no "regular" price to strike through.
       regularTotalCents = option.priceCents;
       lines.push({ label: option.label, amountCents: option.priceCents });
+      break;
+    }
+
+    case "included": {
+      // Nothing is payable for the session itself, so there is no regular price
+      // to strike through and no saving to claim against one.
+      regularTotalCents = 0;
+      lines.push({
+        label: localizedCopy(experience.key, lang)?.includedLabel ?? experience.pricing.label,
+        amountCents: 0,
+      });
       break;
     }
   }
@@ -446,18 +589,51 @@ const WEEKDAY_NAMES = [
   "Saturday",
 ];
 
-/** "8:00 PM" */
-export function formatTime(minutes: number): string {
+/**
+ * Weekday names for a locale.
+ *
+ * Built with `Intl` off a known Sunday rather than translated by hand, so the
+ * Chinese names come out as 周日/周一 with no table to maintain. English keeps
+ * the hard-coded array so its wording is bit-for-bit what it always was.
+ */
+function weekdayNames(lang: Locale, width: "long" | "short"): string[] {
+  if (lang === "en") return width === "long" ? WEEKDAY_NAMES : WEEKDAY_SHORT;
+
+  const format = new Intl.DateTimeFormat(htmlLang[lang], {
+    weekday: width,
+    timeZone: "UTC",
+  });
+  // 2023-01-01 was a Sunday, matching index 0 of the arrays above.
+  return Array.from({ length: 7 }, (_, day) =>
+    format.format(new Date(Date.UTC(2023, 0, 1 + day)))
+  );
+}
+
+/** "8:00 PM", or "下午8:00" in Chinese. */
+export function formatTime(minutes: number, lang: Locale = "en"): string {
   const hour24 = Math.floor(minutes / 60);
   const minute = minutes % 60;
+
+  if (lang !== "en") {
+    return new Intl.DateTimeFormat(htmlLang[lang], {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "UTC",
+    }).format(new Date(Date.UTC(2023, 0, 1, hour24, minute)));
+  }
+
   const suffix = hour24 < 12 ? "AM" : "PM";
   const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
   return `${hour12}:${String(minute).padStart(2, "0")} ${suffix}`;
 }
 
 /** "8:00 PM – 10:00 PM" */
-export function formatTimeRange(startMinutes: number, endMinutes: number): string {
-  return `${formatTime(startMinutes)} – ${formatTime(endMinutes)}`;
+export function formatTimeRange(
+  startMinutes: number,
+  endMinutes: number,
+  lang: Locale = "en"
+): string {
+  return `${formatTime(startMinutes, lang)} – ${formatTime(endMinutes, lang)}`;
 }
 
 /** "HH:MM:SS", the shape Postgres `time` wants. */
@@ -477,17 +653,18 @@ export function fromTimeString(value: string): number {
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /** ["Tue", "Thu", "Sun"] — the days this runs, Monday-first to match the calendar. */
-export function scheduleWeekdays(experience: Experience): string[] {
+export function scheduleWeekdays(experience: Experience, lang: Locale = "en"): string[] {
+  const names = weekdayNames(lang, "short");
   const weekdays = [...new Set(experience.sessions.map((session) => session.weekday))];
   // (day + 6) % 7 puts Monday at 0 and Sunday at 6.
   weekdays.sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
-  return weekdays.map((day) => WEEKDAY_SHORT[day]);
+  return weekdays.map((day) => names[day]);
 }
 
 /** "Tuesday & Thursday" */
-function joinWeekdays(weekdays: number[]): string {
-  const names = weekdays.map((day) => WEEKDAY_NAMES[day]);
-  return names.length > 1 ? `${names.slice(0, -1).join(", ")} & ${names.at(-1)}` : names[0];
+function joinWeekdays(weekdays: number[], lang: Locale): string {
+  const all = weekdayNames(lang, "long");
+  return phrases(lang).joinList(weekdays.map((day) => all[day]));
 }
 
 /**
@@ -498,12 +675,12 @@ function joinWeekdays(weekdays: number[]): string {
  * reads the way someone would say it out loud, rather than repeating the same
  * range once per weekday.
  */
-export function describeSchedule(experience: Experience): string {
+export function describeSchedule(experience: Experience, lang: Locale = "en"): string {
   const timesByWeekday = new Map<number, string[]>();
 
   for (const session of experience.sessions) {
     const times = timesByWeekday.get(session.weekday) ?? [];
-    times.push(formatTimeRange(session.startMinutes, session.endMinutes));
+    times.push(formatTimeRange(session.startMinutes, session.endMinutes, lang));
     timesByWeekday.set(session.weekday, times);
   }
 
@@ -516,7 +693,9 @@ export function describeSchedule(experience: Experience): string {
     else groups.push({ weekdays: [weekday], times: label });
   }
 
-  return groups.map((group) => `${joinWeekdays(group.weekdays)} ${group.times}`).join(" · ");
+  return groups
+    .map((group) => `${joinWeekdays(group.weekdays, lang)} ${group.times}`)
+    .join(phrases(lang).separator);
 }
 
 /* ---- Calendar-date arithmetic ----
@@ -547,9 +726,9 @@ export function addDays(date: string, days: number): string {
   return toDateString(shifted);
 }
 
-/** "Sun, 9 Aug 2026" */
-export function formatDateLong(date: string): string {
-  return parseDate(date).toLocaleDateString("en-MY", {
+/** "Sun, 9 Aug 2026", or "2026年8月9日周日" in Chinese. */
+export function formatDateLong(date: string, lang: Locale = "en"): string {
+  return parseDate(date).toLocaleDateString(lang === "en" ? "en-MY" : htmlLang[lang], {
     timeZone: "UTC",
     weekday: "short",
     day: "numeric",

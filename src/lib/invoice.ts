@@ -1,9 +1,30 @@
 import PDFDocument from "pdfkit";
 import type { StoredOrder } from "./orders-db";
+import { LOGO_HEIGHT, LOGO_WIDTH, logoDataUri, logoPngBuffer } from "./invoice-logo";
 
 export type InvoiceLineItem = {
   label: string;
   amountCents: number;
+};
+
+/** Issuer details, as published on /terms and in the site footer. */
+const ISSUER = {
+  company: "Seni Mega Venture Sdn Bhd",
+  tradingAs: "Traveloop",
+  address: ["50, Jalan Khaw Sim Bee", "10400 Georgetown, Pulau Pinang", "Malaysia"],
+  email: "traveloop@3d-group.com.my",
+  phone: "+6011-3949-2888",
+  licence: "MOTAC Licence — No Siri: P00266 / No. Licence: 0584",
+};
+
+const BRAND = {
+  blue: "#244798",
+  deepBlue: "#071b3a",
+  ink: "#101a2c",
+  muted: "#687187",
+  line: "#d5dae4",
+  headerFill: "#eef1f7",
+  white: "#ffffff",
 };
 
 /** One row per registration when available, falling back to a single summary row for legacy orders. */
@@ -22,7 +43,19 @@ export function invoiceLineItemsFor(
 }
 
 function money(amountMinor: number, currency: string): string {
-  return `${currency.toUpperCase()} ${(amountMinor / 100).toFixed(2)}`;
+  const amount = (amountMinor / 100).toLocaleString("en-MY", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${currency.toUpperCase()} ${amount}`;
+}
+
+function longDate(value: string): string {
+  return new Date(value).toLocaleDateString("en-MY", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 }
 
 function escapeHtml(value: string): string {
@@ -33,217 +66,481 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/**
+ * The label/value pairs describing what was bought, shown above the priced
+ * line items. Entries with no data for this order are dropped.
+ */
+function bookingDetailsFor(order: StoredOrder): { label: string; value: string }[] {
+  const rows = [{ label: "Pass", value: `Traveloop ${order.passName} Pass` }];
+
+  if (order.arrivalDate && order.departureDate) {
+    rows.push({
+      label: "Travel Period",
+      value: `${longDate(order.arrivalDate)} – ${longDate(order.departureDate)}`,
+    });
+  } else if (order.arrivalDate) {
+    rows.push({ label: "Arrival Date", value: longDate(order.arrivalDate) });
+  }
+
+  rows.push({ label: "Quantity", value: `${order.quantity} pass${order.quantity === 1 ? "" : "es"}` });
+  // The Stripe session id used to appear here as the order reference. It's 66
+  // characters of noise to read out over the phone, and "Receipt No." above
+  // already identifies the order, so the reference customers quote is that.
+  return rows;
+}
+
+function customerRowsFor(order: StoredOrder): { label: string; value: string }[] {
+  const rows = [
+    { label: "Name", value: order.customerName ?? "Guest" },
+    { label: "Email Address", value: order.customerEmail ?? "—" },
+  ];
+  if (order.customerPhone) rows.push({ label: "Phone", value: order.customerPhone });
+  return rows;
+}
+
 /** Self-contained, printable HTML invoice — used both as an email attachment body and a standalone page. */
 export function buildInvoiceHtml(order: StoredOrder, lineItems: InvoiceLineItem[]): string {
-  const issued = new Date(order.createdAt).toLocaleDateString("en-MY", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const issued = longDate(order.createdAt);
+  const details = bookingDetailsFor(order);
+  const customer = customerRowsFor(order);
+
+  const labelledRows = (rows: { label: string; value: string }[]) =>
+    rows
+      .map(
+        (row) => `<tr>
+          <th scope="row">${escapeHtml(row.label)}</th>
+          <td colspan="2">${escapeHtml(row.value)}</td>
+        </tr>`
+      )
+      .join("\n");
 
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Invoice ${escapeHtml(order.invoiceNumber)} — Traveloop</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Receipt ${escapeHtml(order.invoiceNumber)} — Traveloop</title>
 <style>
-  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; max-width: 640px; margin: 40px auto; padding: 0 20px; }
-  header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a1a1a; padding-bottom: 16px; margin-bottom: 24px; }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  .brand { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
-  .muted { color: #666; font-size: 13px; }
-  table { width: 100%; border-collapse: collapse; margin: 24px 0; }
-  th, td { text-align: left; padding: 10px 0; border-bottom: 1px solid #e5e5e5; font-size: 14px; }
-  th { color: #666; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
-  .amount { text-align: right; }
-  .total-row td { border-bottom: none; border-top: 2px solid #1a1a1a; font-weight: 700; font-size: 16px; padding-top: 14px; }
-  .grid { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 8px; }
-  footer { margin-top: 32px; font-size: 12px; color: #888; }
-  @media print { body { margin: 0; } }
+  :root {
+    --blue: ${BRAND.blue};
+    --deep-blue: ${BRAND.deepBlue};
+    --ink: ${BRAND.ink};
+    --muted: ${BRAND.muted};
+    --line: ${BRAND.line};
+    --header-fill: ${BRAND.headerFill};
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "DM Sans", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--ink);
+    background: #eef0f4;
+    margin: 0;
+    padding: 32px 16px;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .sheet {
+    max-width: 780px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 48px 44px 36px;
+    box-shadow: 0 18px 48px rgba(7, 27, 58, 0.1);
+  }
+  .masthead { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+  .masthead img { width: 186px; height: auto; }
+  .title { text-align: right; }
+  .title h1 {
+    margin: 0;
+    font-size: 30px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--blue);
+    font-weight: 700;
+  }
+  .meta { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; margin-top: 32px; }
+  .issuer { font-size: 13px; color: var(--muted); }
+  .issuer strong { display: block; color: var(--ink); font-size: 14px; margin-bottom: 2px; }
+  .eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .stamp { border: 1px solid var(--line); min-width: 268px; margin: 0; }
+  .stamp div { display: flex; border-bottom: 1px solid var(--line); }
+  .stamp div:last-child { border-bottom: 0; }
+  .stamp dt {
+    width: 118px;
+    flex: none;
+    margin: 0;
+    padding: 9px 12px;
+    background: var(--header-fill);
+    border-right: 1px solid var(--line);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .stamp dd { margin: 0; padding: 9px 12px; font-size: 13px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin-top: 28px; border: 1px solid var(--line); }
+  caption, .section-head {
+    background: var(--header-fill);
+    border-bottom: 1px solid var(--line);
+    padding: 9px 12px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--deep-blue);
+  }
+  th, td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 13px; }
+  tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+  th[scope="row"] {
+    width: 168px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--muted);
+    border-right: 1px solid var(--line);
+  }
+  .amount { width: 150px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .items thead th {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-align: left;
+    color: var(--deep-blue);
+    background: var(--header-fill);
+  }
+  .items thead th.amount { text-align: right; }
+  .subtotal td, .subtotal th { font-weight: 600; }
+  .grand th, .grand td {
+    background: var(--blue);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    border-bottom: 0;
+  }
+  footer { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 14px; font-size: 11px; color: var(--muted); }
+  footer p { margin: 0 0 4px; }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .sheet { box-shadow: none; max-width: none; padding: 0; }
+  }
+  @media (max-width: 640px) {
+    .sheet { padding: 28px 20px; }
+    .masthead, .meta { flex-direction: column; }
+    .title { text-align: left; }
+    .stamp { min-width: 0; }
+  }
 </style>
 </head>
 <body>
-  <header>
-    <div>
-      <div class="brand">Traveloop</div>
-      <div class="muted">Penang, Malaysia</div>
+  <main class="sheet">
+    <div class="masthead">
+      <img src="${logoDataUri}" alt="Traveloop" width="${LOGO_WIDTH}" height="${LOGO_HEIGHT}" />
+      <div class="title">
+        <h1>Receipt</h1>
+      </div>
     </div>
-    <div>
-      <h1>Invoice</h1>
-      <div class="muted">${escapeHtml(order.invoiceNumber)}</div>
-      <div class="muted">${escapeHtml(issued)}</div>
-    </div>
-  </header>
 
-  <div class="grid">
-    <div>
-      <div class="muted">Billed to</div>
-      <div>${escapeHtml(order.customerName ?? "Guest")}</div>
-      <div>${escapeHtml(order.customerEmail ?? "")}</div>
-      ${order.customerPhone ? `<div>${escapeHtml(order.customerPhone)}</div>` : ""}
+    <div class="meta">
+      <div class="issuer">
+        <div class="eyebrow">Issued by</div>
+        <strong>${escapeHtml(ISSUER.company)}</strong>
+        trading as ${escapeHtml(ISSUER.tradingAs)}<br />
+        ${ISSUER.address.map(escapeHtml).join("<br />")}<br />
+        ${escapeHtml(ISSUER.email)}<br />
+        ${escapeHtml(ISSUER.phone)}
+      </div>
+      <dl class="stamp">
+        <div><dt>Receipt No.</dt><dd>${escapeHtml(order.invoiceNumber)}</dd></div>
+        <div><dt>Payment Date</dt><dd>${escapeHtml(issued)}</dd></div>
+      </dl>
     </div>
-    <div>
-      <div class="muted">Order reference</div>
-      <div>${escapeHtml(order.sessionId)}</div>
-    </div>
-  </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Item</th>
-        <th class="amount">Amount</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${lineItems
-        .map(
-          (item) => `<tr>
-        <td>${escapeHtml(item.label)}</td>
-        <td class="amount">${money(item.amountCents, order.currency)}</td>
-      </tr>`
-        )
-        .join("\n")}
-      <tr class="total-row">
-        <td>Total paid</td>
-        <td class="amount">${money(order.amountTotal, order.currency)}</td>
-      </tr>
-    </tbody>
-  </table>
+    <table>
+      <caption>Customer Name &amp; Address</caption>
+      <tbody>
+        ${labelledRows(customer)}
+      </tbody>
+    </table>
 
-  <footer>
-    <p>This is an automatically generated invoice for a Traveloop pass purchase. Quote the order reference above if you contact us about this order.</p>
-  </footer>
+    <table class="items">
+      <thead>
+        <tr>
+          <th colspan="2">Description</th>
+          <th class="amount">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${details
+          .map(
+            (row) => `<tr>
+          <th scope="row">${escapeHtml(row.label)}</th>
+          <td colspan="2">${escapeHtml(row.value)}</td>
+        </tr>`
+          )
+          .join("\n")}
+        ${lineItems
+          .map(
+            (item) => `<tr>
+          <td colspan="2">${escapeHtml(item.label)}</td>
+          <td class="amount">${money(item.amountCents, order.currency)}</td>
+        </tr>`
+          )
+          .join("\n")}
+        <tr class="subtotal">
+          <td colspan="2">Total Charge</td>
+          <td class="amount">${money(order.amountTotal, order.currency)}</td>
+        </tr>
+        <tr class="grand">
+          <td colspan="2">GRAND TOTAL</td>
+          <td class="amount">${money(order.amountTotal, order.currency)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <footer>
+      <p>This email is auto generated and is valid without a signature.</p>
+    </footer>
+  </main>
 </body>
 </html>`;
 }
 
-/** Same invoice as buildInvoiceHtml, laid out as a one-page PDF — used for the email attachment. */
+/**
+ * Same receipt as buildInvoiceHtml, laid out for A4 — this is what gets
+ * attached to the confirmation email. Normally one page; a long order spills
+ * onto further pages and the footer follows onto the last of them.
+ */
 export function buildInvoicePdf(order: StoredOrder, lineItems: InvoiceLineItem[]): Promise<Buffer> {
-  const issued = new Date(order.createdAt).toLocaleDateString("en-MY", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const issued = longDate(order.createdAt);
 
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    const margin = 46;
+    const doc = new PDFDocument({ size: "A4", margin, info: { Title: `Receipt ${order.invoiceNumber}` } });
     const chunks: Buffer[] = [];
 
     doc.on("data", (chunk) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const black = "#1a1a1a";
-    const muted = "#666666";
+    const left = margin;
+    const width = doc.page.width - margin * 2;
+    const right = left + width;
+
+    // ---- Masthead: wordmark left, "RECEIPT" right -------------------------
+    const logoWidth = 150;
+    doc.image(logoPngBuffer(), left, margin, { width: logoWidth });
 
     doc
-      .fillColor(black)
+      .fillColor(BRAND.blue)
       .font("Helvetica-Bold")
-      .fontSize(20)
-      .text("Traveloop", { continued: false });
-    doc.fillColor(muted).font("Helvetica").fontSize(11).text("Penang, Malaysia");
+      .fontSize(26)
+      .text("RECEIPT", left, margin - 2, { width, align: "right", characterSpacing: 3 });
 
-    const headerTop = doc.y - 33;
+    // ---- Issuer block (left) and receipt stamp (right) --------------------
+    const metaTop = margin + LOGO_HEIGHT * (logoWidth / LOGO_WIDTH) + 26;
+
     doc
-      .fillColor(black)
+      .fillColor(BRAND.muted)
       .font("Helvetica-Bold")
-      .fontSize(16)
-      .text("Invoice", 0, headerTop, { width: pageWidth, align: "right" });
+      .fontSize(7.5)
+      .text("ISSUED BY", left, metaTop, { characterSpacing: 1.2 });
     doc
-      .fillColor(muted)
-      .font("Helvetica")
-      .fontSize(11)
-      .text(order.invoiceNumber, { width: pageWidth, align: "right" })
-      .text(issued, { width: pageWidth, align: "right" });
-
-    doc
-      .moveTo(doc.page.margins.left, doc.y + 10)
-      .lineTo(doc.page.margins.left + pageWidth, doc.y + 10)
-      .lineWidth(1.5)
-      .strokeColor(black)
-      .stroke();
-    doc.moveDown(2.2);
-
-    const detailsTop = doc.y;
-    doc.fillColor(muted).fontSize(10).text("Billed to", doc.page.margins.left, detailsTop);
-    doc
-      .fillColor(black)
-      .fontSize(12)
-      .text(order.customerName ?? "Guest")
-      .text(order.customerEmail ?? "");
-    if (order.customerPhone) doc.text(order.customerPhone);
-
-    const halfWidth = pageWidth / 2;
-    doc
-      .fillColor(muted)
+      .fillColor(BRAND.ink)
+      .font("Helvetica-Bold")
       .fontSize(10)
-      .text("Order reference", doc.page.margins.left + halfWidth, detailsTop, { width: halfWidth });
+      .text(ISSUER.company, left, metaTop + 12);
     doc
-      .fillColor(black)
-      .fontSize(12)
-      .text(order.sessionId, doc.page.margins.left + halfWidth, doc.y, { width: halfWidth });
-
-    doc.moveDown(2.5);
-
-    const tableTop = doc.y;
-    const col = {
-      item: doc.page.margins.left,
-      amount: doc.page.margins.left + pageWidth * 0.75,
-    };
-    const colWidth = {
-      item: pageWidth * 0.75 - 10,
-      amount: pageWidth * 0.25,
-    };
-
-    doc.font("Helvetica-Bold").fontSize(9).fillColor(muted);
-    doc.text("ITEM", col.item, tableTop);
-    doc.text("AMOUNT", col.amount, tableTop, { width: colWidth.amount, align: "right" });
-
-    const rowTop = tableTop + 18;
-    doc
-      .moveTo(doc.page.margins.left, rowTop - 4)
-      .lineTo(doc.page.margins.left + pageWidth, rowTop - 4)
-      .lineWidth(0.5)
-      .strokeColor("#e5e5e5")
-      .stroke();
-
-    doc.font("Helvetica").fontSize(11).fillColor(black);
-    const rowHeight = 22;
-    lineItems.forEach((item, index) => {
-      const y = rowTop + index * rowHeight;
-      doc.text(item.label, col.item, y, { width: colWidth.item });
-      doc.text(money(item.amountCents, order.currency), col.amount, y, {
-        width: colWidth.amount,
-        align: "right",
-      });
-    });
-
-    const totalTop = rowTop + lineItems.length * rowHeight + 6;
-    doc
-      .moveTo(doc.page.margins.left, totalTop - 8)
-      .lineTo(doc.page.margins.left + pageWidth, totalTop - 8)
-      .lineWidth(1.5)
-      .strokeColor(black)
-      .stroke();
-    doc.font("Helvetica-Bold").fontSize(13);
-    doc.text("Total paid", col.item, totalTop);
-    doc.text(money(order.amountTotal, order.currency), col.amount, totalTop, {
-      width: colWidth.amount,
-      align: "right",
-    });
-
-    doc
+      .fillColor(BRAND.muted)
       .font("Helvetica")
       .fontSize(9)
-      .fillColor(muted)
-      .text(
-        "This is an automatically generated invoice for a Traveloop pass purchase. Quote the order reference above if you contact us about this order.",
-        doc.page.margins.left,
-        doc.page.height - doc.page.margins.bottom - 30,
-        { width: pageWidth }
-      );
+      .text(`trading as ${ISSUER.tradingAs}`, left, doc.y + 1);
+    for (const line of [...ISSUER.address, ISSUER.email, ISSUER.phone]) {
+      doc.text(line, left, doc.y + 1);
+    }
+    // Captured before the stamp box below moves `doc.y` back up to its own rows.
+    const issuerBottom = doc.y;
+
+    const stampWidth = 244;
+    const stampLabelWidth = 104;
+    const stampRowHeight = 22;
+    const stampLeft = right - stampWidth;
+    for (const [index, [label, value]] of (
+      [
+        ["Receipt No.", order.invoiceNumber],
+        ["Payment Date", issued],
+      ] as const
+    ).entries()) {
+      const rowTop = metaTop + index * stampRowHeight;
+      doc.rect(stampLeft, rowTop, stampLabelWidth, stampRowHeight).fill(BRAND.headerFill);
+      doc
+        .rect(stampLeft, rowTop, stampWidth, stampRowHeight)
+        .lineWidth(0.7)
+        .strokeColor(BRAND.line)
+        .stroke();
+      doc
+        .moveTo(stampLeft + stampLabelWidth, rowTop)
+        .lineTo(stampLeft + stampLabelWidth, rowTop + stampRowHeight)
+        .stroke();
+      doc
+        .fillColor(BRAND.muted)
+        .font("Helvetica-Bold")
+        .fontSize(9)
+        .text(label, stampLeft + 10, rowTop + 7, { width: stampLabelWidth - 16 });
+      doc
+        .fillColor(BRAND.ink)
+        .font("Helvetica-Bold")
+        .fontSize(9.5)
+        .text(value, stampLeft + stampLabelWidth + 10, rowTop + 7, {
+          width: stampWidth - stampLabelWidth - 16,
+        });
+    }
+
+    // ---- Shared table primitives -----------------------------------------
+    const padX = 10;
+    const padY = 7;
+    const labelWidth = 152;
+    const amountWidth = 118;
+    const amountLeft = right - amountWidth;
+    /** Rows stop here so they never run into the pinned footer. */
+    const contentBottom = doc.page.height - margin - 40;
+
+    /** Starts a new page when `height` would not fit, returning the y to draw at. */
+    function fit(top: number, height: number): number {
+      if (top + height <= contentBottom) return top;
+      doc.addPage();
+      return margin;
+    }
+
+    /** A full-width banner row (the grey caption above each table). */
+    function sectionHead(start: number, text: string): number {
+      const height = 21;
+      const top = fit(start, height + 22);
+      doc.rect(left, top, width, height).fill(BRAND.headerFill);
+      doc.rect(left, top, width, height).lineWidth(0.7).strokeColor(BRAND.line).stroke();
+      doc
+        .fillColor(BRAND.deepBlue)
+        .font("Helvetica-Bold")
+        .fontSize(8.5)
+        .text(text.toUpperCase(), left + padX, top + 6.5, { characterSpacing: 1 });
+      return top + height;
+    }
+
+    /** Measures then draws a `label | value` row, returning the next y. */
+    function labelRow(start: number, label: string, value: string, mono = false): number {
+      const valueLeft = left + labelWidth;
+      const valueWidth = width - labelWidth - padX * 2;
+      doc.font(mono ? "Courier" : "Helvetica").fontSize(mono ? 8.5 : 9.5);
+      const height = Math.max(doc.heightOfString(value, { width: valueWidth }) + padY * 2, 22);
+      const top = fit(start, height);
+
+      doc.rect(left, top, width, height).lineWidth(0.7).strokeColor(BRAND.line).stroke();
+      doc
+        .moveTo(valueLeft, top)
+        .lineTo(valueLeft, top + height)
+        .stroke();
+      doc
+        .fillColor(BRAND.muted)
+        .font("Helvetica-Bold")
+        .fontSize(9)
+        .text(label, left + padX, top + padY, { width: labelWidth - padX * 2 });
+      doc
+        .fillColor(BRAND.ink)
+        .font(mono ? "Courier" : "Helvetica")
+        .fontSize(mono ? 8.5 : 9.5)
+        .text(value, valueLeft + padX, top + padY, { width: valueWidth });
+      return top + height;
+    }
+
+    /** A priced row: description on the left, right-aligned amount on the right. */
+    function amountRow(
+      start: number,
+      label: string,
+      amount: string,
+      style: "item" | "subtotal" | "grand" = "item"
+    ): number {
+      const height = style === "grand" ? 28 : 22;
+      const top = fit(start, height);
+      const bold = style !== "item";
+      const textTop = top + (height - (style === "grand" ? 11 : 9.5)) / 2 - 1;
+
+      if (style === "grand") {
+        doc.rect(left, top, width, height).fill(BRAND.blue);
+      } else {
+        doc.rect(left, top, width, height).lineWidth(0.7).strokeColor(BRAND.line).stroke();
+        doc
+          .moveTo(amountLeft, top)
+          .lineTo(amountLeft, top + height)
+          .stroke();
+      }
+
+      const ink = style === "grand" ? BRAND.white : BRAND.ink;
+      doc
+        .fillColor(ink)
+        .font(bold ? "Helvetica-Bold" : "Helvetica")
+        .fontSize(style === "grand" ? 11 : 9.5)
+        .text(label, left + padX, textTop, { width: width - amountWidth - padX * 2 });
+      doc
+        .fillColor(ink)
+        .font(bold ? "Helvetica-Bold" : "Helvetica")
+        .fontSize(style === "grand" ? 11 : 9.5)
+        .text(amount, amountLeft, textTop, { width: amountWidth - padX, align: "right" });
+      return top + height;
+    }
+
+    // ---- Customer ---------------------------------------------------------
+    let y = Math.max(issuerBottom, metaTop + stampRowHeight * 2) + 26;
+    y = sectionHead(y, "Customer Name & Address");
+    for (const row of customerRowsFor(order)) {
+      y = labelRow(y, row.label, row.value);
+    }
+
+    // ---- Description / amount --------------------------------------------
+    y += 22;
+    const headTop = y;
+    const headHeight = 21;
+    doc.rect(left, headTop, width, headHeight).fill(BRAND.headerFill);
+    doc.rect(left, headTop, width, headHeight).lineWidth(0.7).strokeColor(BRAND.line).stroke();
+    doc
+      .moveTo(amountLeft, headTop)
+      .lineTo(amountLeft, headTop + headHeight)
+      .stroke();
+    doc.fillColor(BRAND.deepBlue).font("Helvetica-Bold").fontSize(8.5);
+    doc.text("DESCRIPTION", left + padX, headTop + 6.5, { characterSpacing: 1 });
+    doc.text("AMOUNT", amountLeft, headTop + 6.5, {
+      width: amountWidth - padX,
+      align: "right",
+      characterSpacing: 1,
+    });
+    y = headTop + headHeight;
+
+    for (const row of bookingDetailsFor(order)) {
+      y = labelRow(y, row.label, row.value);
+    }
+    for (const item of lineItems) {
+      y = amountRow(y, item.label, money(item.amountCents, order.currency));
+    }
+    y = amountRow(y, "Total Charge", money(order.amountTotal, order.currency), "subtotal");
+    amountRow(y, "GRAND TOTAL", money(order.amountTotal, order.currency), "grand");
+
+    // ---- Footer, pinned to the bottom of the page -------------------------
+    const footTop = doc.page.height - margin - 22;
+    doc
+      .moveTo(left, footTop)
+      .lineTo(right, footTop)
+      .lineWidth(0.7)
+      .strokeColor(BRAND.line)
+      .stroke();
+    doc
+      .fillColor(BRAND.muted)
+      .font("Helvetica")
+      .fontSize(8)
+      .text("This email is auto generated and is valid without a signature.", left, footTop + 10, { width });
 
     doc.end();
   });

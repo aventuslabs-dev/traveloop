@@ -1,3 +1,5 @@
+import type { Locale } from "@/i18n/config";
+
 export type PartnerCategory = "Dining" | "Shopping" | "Experiences" | "Wellness";
 
 export type Partner = {
@@ -249,3 +251,43 @@ export const partners: Partner[] = [
     terms: "Valid until 31 Dec 2026.",
   },
 ];
+
+/**
+ * The partner list in one locale.
+ *
+ * English is the source of truth: the Chinese file supplies phrase-level
+ * overrides and anything it does not cover falls through to English, so a
+ * newly added partner shows up on both sites immediately rather than
+ * disappearing from one of them.
+ */
+export type LocalizedPartner = Partner & { categoryLabel: string };
+
+export async function getPartners(lang: Locale): Promise<LocalizedPartner[]> {
+  if (lang === "en") {
+    return partners.map((p) => ({ ...p, categoryLabel: p.category }));
+  }
+
+  const { categoriesCn, dealsCn, locationsCn, termsCn } = await import("./cn/partners");
+
+  return partners.map((p) => ({
+    ...p,
+    categoryLabel: categoriesCn[p.category] ?? p.category,
+    location: p.location ? locationsCn[p.location] ?? p.location : undefined,
+    deal: dealsCn[p.deal] ?? p.deal,
+    terms: p.terms ? termsCn[p.terms] ?? p.terms : undefined,
+  }));
+}
+
+/** Category filter labels for the directory, in display order. */
+export async function getPartnerCategoryLabels(
+  lang: Locale
+): Promise<Record<PartnerCategory, string>> {
+  if (lang === "en") {
+    return Object.fromEntries(partnerCategories.map((c) => [c, c])) as Record<
+      PartnerCategory,
+      string
+    >;
+  }
+  const { categoriesCn } = await import("./cn/partners");
+  return categoriesCn;
+}

@@ -1,24 +1,31 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { splitLocale, type Locale } from "@/i18n/config";
 
 /**
  * Urban Sprint pages anyone may see without signing in. The campaign leans on
  * its leaderboard being public, so the board and the landing page that
- * previews it are deliberately open, as is the pulse endpoint they poll.
+ * previews it are deliberately open. Listed without a locale prefix — they are
+ * compared against the path after the prefix is stripped. The pulse endpoint
+ * they poll lives under /api and never reaches this proxy at all.
  */
 const URBAN_SPRINT_PUBLIC = [
   "/urban-sprint",
   "/urban-sprint/leaderboard",
   "/urban-sprint/login",
-  "/urban-sprint/api/pulse",
 ];
 
 /**
  * Refreshes the Supabase auth cookie and gates /admin, /account and the
  * signed-in half of /urban-sprint behind a logged-in session. Runs in proxy.ts
  * (this Next.js version's renamed middleware).
+ *
+ * `locale` is the segment proxy.ts already parsed off the front of the path.
+ * Every check below runs against the *unprefixed* path, and every redirect
+ * puts the prefix back, so a signed-out visitor on /cn/account is sent to
+ * /cn/account/login rather than dumped into English.
  */
-export async function updateSession(request: NextRequest) {
+export async function updateSession(request: NextRequest, locale: Locale) {
   let response = NextResponse.next({ request });
 
   const url = process.env.SUPABASE_URL;
@@ -52,17 +59,21 @@ export async function updateSession(request: NextRequest) {
   const isAdmin = Boolean(user && user.email === process.env.ADMIN_LOGIN_EMAIL);
 
   const { pathname } = request.nextUrl;
+  const { rest: path } = splitLocale(pathname);
 
-  if (pathname.startsWith("/admin")) {
-    if (!isAdmin && pathname !== "/admin/login") {
+  /** Re-attaches the locale so a redirect keeps the visitor in their language. */
+  const localized = (target: string) => `/${locale}${target}`;
+
+  if (path.startsWith("/admin")) {
+    if (!isAdmin && path !== "/admin/login") {
       const loginUrl = request.nextUrl.clone();
-      loginUrl.pathname = "/admin/login";
+      loginUrl.pathname = localized("/admin/login");
       return NextResponse.redirect(loginUrl);
     }
 
-    if (isAdmin && pathname === "/admin/login") {
+    if (isAdmin && path === "/admin/login") {
       const adminUrl = request.nextUrl.clone();
-      adminUrl.pathname = "/admin";
+      adminUrl.pathname = localized("/admin");
       return NextResponse.redirect(adminUrl);
     }
   }
@@ -71,28 +82,28 @@ export async function updateSession(request: NextRequest) {
   // all that is checked here. *Which* Urban Sprint role a page needs is
   // decided by requireRole() in the page or action that serves the data —
   // proxy is the optimistic check, not the authorisation.
-  if (pathname.startsWith("/urban-sprint")) {
-    const isPublic = URBAN_SPRINT_PUBLIC.includes(pathname);
+  if (path.startsWith("/urban-sprint")) {
+    const isPublic = URBAN_SPRINT_PUBLIC.includes(path);
 
     if (!user && !isPublic) {
       const loginUrl = request.nextUrl.clone();
-      loginUrl.pathname = "/urban-sprint/login";
+      loginUrl.pathname = localized("/urban-sprint/login");
       // So a deep link survives the detour through the login form.
       loginUrl.searchParams.set("next", pathname);
       return NextResponse.redirect(loginUrl);
     }
   }
 
-  if (pathname.startsWith("/account")) {
-    if (!user && pathname !== "/account/login") {
+  if (path.startsWith("/account")) {
+    if (!user && path !== "/account/login") {
       const loginUrl = request.nextUrl.clone();
-      loginUrl.pathname = "/account/login";
+      loginUrl.pathname = localized("/account/login");
       return NextResponse.redirect(loginUrl);
     }
 
-    if (user && pathname === "/account/login") {
+    if (user && path === "/account/login") {
       const accountUrl = request.nextUrl.clone();
-      accountUrl.pathname = "/account";
+      accountUrl.pathname = localized("/account");
       return NextResponse.redirect(accountUrl);
     }
   }

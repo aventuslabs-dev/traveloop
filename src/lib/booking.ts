@@ -100,7 +100,7 @@ export function parseBookingForm(
     return { ok: false, error: "Please enter a valid number of children." };
   }
 
-  // --- Package (photography) ---------------------------------------------
+  // --- Package ------------------------------------------------------------
   let packageKey: string | null = null;
   if (experience.pricing.mode === "packages") {
     const submitted = text(formData, "packageKey");
@@ -109,6 +109,11 @@ export function parseBookingForm(
       return { ok: false, error: "Please choose a photo package." };
     }
     packageKey = option.key;
+  } else if (experience.pricing.mode === "per-person" && experience.pricing.groupPack) {
+    // A group pack is opt-in, so anything other than its own key — including
+    // nothing at all — is the plain per-person rate rather than an error.
+    const { groupPack } = experience.pricing;
+    packageKey = text(formData, "packageKey") === groupPack.key ? groupPack.key : null;
   }
 
   // --- Location -----------------------------------------------------------

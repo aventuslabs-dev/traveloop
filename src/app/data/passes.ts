@@ -3,11 +3,22 @@ import {
   formatDiscountPercent,
   getEntitlement,
   getExperience,
+  localizeExperience,
   regularPerPersonCents,
   tierPerPersonCents,
   type Experience,
   type ExperienceKey,
 } from "./experiences";
+
+import type { Locale } from "@/i18n/config";
+import { phrases } from "./phrases";
+import {
+  highlightCopyCn,
+  perkCopyCn,
+  rowCopyCn,
+  tierCopyCn,
+  valueCopyCn,
+} from "./cn/passes";
 
 export type PassKey = "silver" | "gold" | "platinum";
 
@@ -51,6 +62,99 @@ function perPersonLabel(cents: number): string {
   return `MYR ${cents % 100 === 0 ? String(cents / 100) : formatAmount(cents)}`;
 }
 
+/**
+ * The words on the pricing cards, comparison table and perk list, per locale.
+ *
+ * Amounts are never in here — every figure on these cards is generated from
+ * `priceCents` and `experiences.ts` below, so a translation cannot put a
+ * different number in front of a Chinese shopper than an English one.
+ */
+const tierCopyEn: Record<PassKey, { name: string; tagline: string; sub: string; badge?: string }> = {
+  silver: { name: "Silver", tagline: "Great value.", sub: "More to explore." },
+  gold: {
+    name: "Gold",
+    tagline: "Most popular.",
+    sub: "More to enjoy.",
+    badge: "Most Popular",
+  },
+  platinum: { name: "Platinum", tagline: "Ultimate experience.", sub: "More to indulge." },
+};
+
+const highlightCopyEn = {
+  retail: "Retail deals worth up to MYR 15,000",
+  fnb: "Food & beverage deals worth up to MYR 3,000",
+  insurance: "Travel & personal accident insurance (Tokio Marine)",
+  accidentCover: "Up to MYR 50,000 accidental death & disablement",
+  photography: "90-minute private photography session",
+  prioritySupport: "Priority support",
+};
+
+const rowCopyEn = {
+  retail: "Retail deals",
+  fnb: "Food & beverage deals",
+  insurance: "Travel & accident insurance",
+  photography: "Private photography session",
+};
+
+const valueCopyEn = {
+  retailAmount: "Up to MYR 15,000",
+  fnbAmount: "Up to MYR 3,000",
+};
+
+const perkCopyEn: Record<string, { title: string; description: string; note?: string }> = {
+  retail: {
+    title: "Retail deals",
+    description:
+      "Save at partner shops and attractions across Malaysia, including Upside Down Museum Penang, BMS Organics, and Glass Museum Penang.",
+    note: "Worth up to MYR 15,000",
+  },
+  fnb: {
+    title: "Food & beverage deals",
+    description:
+      "Exclusive discounts at Starbucks, Le Petit Four Pâtisserie, Mixue, Family Mart, Hero Tea, Rendez by Meowcho, and more.",
+    note: "Worth up to MYR 3,000",
+  },
+  "lion-dance": {
+    title: "Lion Dance Experience",
+    description:
+      "Learn the basics of lion dance with authentic instruments and a traditional lion head. Book per person, or take the Family Pack for up to 4 with extra participants at MYR 100 each. Sessions run Tuesday & Thursday 8:00–10:00 PM and Sunday 1:00–3:00 PM. Children aged 5 and under join free.",
+  },
+  batik: {
+    title: "Batik Painting Experience",
+    description:
+      "Discover the history behind Malaysian batik and create your own hand-painted souvenir, including museum admission and light refreshments. Runs Wednesday 10:00 AM–12:00 PM. Children aged 4 and under join free.",
+  },
+  "indian-culture": {
+    title: "Indian Culture Experience",
+    description:
+      "Try your hand at kolam (rice-flour rangoli) art, a traditional Indian cooking lesson, and a Bharatanatyam dance demonstration. Runs Sunday 3:00–5:00 PM. Children aged 5 and under join free.",
+  },
+  insurance: {
+    title: "Travel & accident insurance",
+    description:
+      "Group Personal Accident Insurance underwritten by Tokio Marine Insurans (Malaysia) Berhad, covering registered participants aged 30 days to 75 years while in Malaysia — including amateur sports, scuba diving up to 50m, and mountaineering.",
+    note: "Up to MYR 50,000 accidental death & disablement · MYR 500 medical expenses",
+  },
+  photography: {
+    title: "Private photography session",
+    description:
+      "A 90-minute private photoshoot with a professional photographer through George Town's UNESCO heritage zone, with 5 edited high-resolution photos and a 30-second video included. Up to 7 people in the shoot. Runs Saturday 8:30–10:00 AM and 10:00–11:30 AM.",
+    note: "Free · 5 edited photos + a 30-second video · Book at least 3 days ahead",
+  },
+};
+
+/** The copy set for a locale, with English standing in for anything untranslated. */
+function copy(lang: Locale) {
+  const cn = lang === "cn";
+  return {
+    tier: (key: PassKey) => ({ ...tierCopyEn[key], ...(cn ? tierCopyCn[key] : {}) }),
+    highlight: cn ? { ...highlightCopyEn, ...highlightCopyCn } : highlightCopyEn,
+    row: cn ? { ...rowCopyEn, ...rowCopyCn } : rowCopyEn,
+    value: cn ? { ...valueCopyEn, ...valueCopyCn } : valueCopyEn,
+    perk: (id: string) => ({ ...perkCopyEn[id], ...(cn ? perkCopyCn[id] ?? {} : {}) }),
+  };
+}
+
 /** The experiences a pass is sold on, in the order they're listed. */
 const comparedExperienceKeys: ExperienceKey[] = ["lion-dance", "batik", "indian-culture"];
 
@@ -59,14 +163,10 @@ const comparedExperiences: Experience[] = comparedExperienceKeys.flatMap((key) =
   return experience ? [experience] : [];
 });
 
-/** "Lion Dance Experience" -> "Lion Dance" */
-function shortExperienceName(experience: Experience): string {
-  return experience.name.replace(/ Experience$/, "");
-}
-
-/** ["A", "B", "C"] -> "A, B & C" */
-function joinNames(names: string[]): string {
-  return names.length > 1 ? `${names.slice(0, -1).join(", ")} & ${names.at(-1)}` : names[0];
+/** "Lion Dance Experience" -> "Lion Dance", "舞狮体验" -> "舞狮" */
+function shortExperienceName(experience: Experience, lang: Locale): string {
+  const name = localizeExperience(experience, lang).name;
+  return lang === "cn" ? name.replace(/体验$/, "") : name.replace(/ Experience$/, "");
 }
 
 /**
@@ -74,11 +174,11 @@ function joinNames(names: string[]): string {
  * "50% off Lion Dance, Batik Painting & Indian Culture experiences".
  *
  * The rate most experiences share becomes the headline and anything discounted
- * differently is named with its own price — Platinum's Lion Dance lands at
- * MYR 130, deeper than its flat 75%, and folding that into one percentage
- * would put a wrong number on the card.
+ * differently is named with its own price instead — folding an odd rate into
+ * the one percentage would put a wrong number on the card.
  */
-function experienceHighlight(tier: PassKey): string | null {
+function experienceHighlight(tier: PassKey, lang: Locale): string | null {
+  const p = phrases(lang);
   const entries = comparedExperiences
     .map((experience) => ({ experience, entitlement: getEntitlement(tier, experience) }))
     .filter(({ entitlement }) => entitlement.entitled);
@@ -94,69 +194,79 @@ function experienceHighlight(tier: PassKey): string | null {
   const shared = entries.filter(({ entitlement }) => entitlement.discountPercent === headline);
   const outliers = entries.filter(({ entitlement }) => entitlement.discountPercent !== headline);
 
-  const names = joinNames(shared.map(({ experience }) => shortExperienceName(experience)));
-  const parts = [`${formatDiscountPercent(headline)}% off ${names} experiences`];
+  const names = p.joinList(
+    shared.map(({ experience }) => shortExperienceName(experience, lang))
+  );
+  const parts = [p.experienceDiscounts(p.discount(headline), names)];
 
   for (const { experience } of outliers) {
     const cents = tierPerPersonCents(experience, tier);
     if (cents === null) continue;
-    parts.push(`${shortExperienceName(experience)} from ${perPersonLabel(cents)}/pax`);
+    parts.push(
+      p.nameFromPrice(shortExperienceName(experience, lang), p.perPax(perPersonLabel(cents)))
+    );
   }
 
-  return parts.join(" · ");
+  return parts.join(p.separator);
 }
 
-const passTierSeeds: PassTierSeed[] = [
-  {
-    key: "silver",
-    name: "Silver",
-    priceCents: 3990,
-    originalPriceCents: 7990,
-    tagline: "Great value.",
-    sub: "More to explore.",
-    highlights: [
-      "Retail deals worth up to MYR 15,000",
-      "Food & beverage deals worth up to MYR 3,000",
-      experienceHighlight("silver"),
-    ],
-  },
-  {
-    key: "gold",
-    name: "Gold",
-    priceCents: 6990,
-    originalPriceCents: 13990,
-    badge: "Most Popular",
-    tagline: "Most popular.",
-    sub: "More to enjoy.",
-    highlights: [
-      "Everything in Silver",
-      experienceHighlight("gold"),
-      "Travel & personal accident insurance (Tokio Marine)",
-      "Up to MYR 50,000 accidental death & disablement cover",
-    ],
-  },
-  {
-    key: "platinum",
-    name: "Platinum",
-    priceCents: 8990,
-    originalPriceCents: 17990,
-    tagline: "Ultimate experience.",
-    sub: "More to indulge.",
-    highlights: [
-      "Everything in Gold",
-      experienceHighlight("platinum"),
-      "90-minute private photography session",
-      "Priority support",
-    ],
-  },
-];
+function passTierSeeds(lang: Locale): PassTierSeed[] {
+  const c = copy(lang);
+  const p = phrases(lang);
 
-export const passTiers: PassTier[] = passTierSeeds.map((tier) => ({
-  ...tier,
-  highlights: tier.highlights.filter((h): h is string => h !== null),
-  price: formatMinorUnits(tier.priceCents),
-  originalPrice: formatMinorUnits(tier.originalPriceCents),
-}));
+  return [
+    {
+      key: "silver",
+      ...c.tier("silver"),
+      priceCents: 3990,
+      originalPriceCents: 7990,
+      highlights: [c.highlight.retail, c.highlight.fnb, experienceHighlight("silver", lang)],
+    },
+    {
+      key: "gold",
+      ...c.tier("gold"),
+      priceCents: 6990,
+      originalPriceCents: 13990,
+      highlights: [
+        p.everythingIn(c.tier("silver").name),
+        experienceHighlight("gold", lang),
+        c.highlight.insurance,
+        c.highlight.accidentCover,
+      ],
+    },
+    {
+      key: "platinum",
+      ...c.tier("platinum"),
+      priceCents: 8990,
+      originalPriceCents: 17990,
+      highlights: [
+        p.everythingIn(c.tier("gold").name),
+        experienceHighlight("platinum", lang),
+        c.highlight.photography,
+        c.highlight.prioritySupport,
+      ],
+    },
+  ];
+}
+
+/** Every tier, priced and worded for one locale. */
+export function getPassTiers(lang: Locale): PassTier[] {
+  return passTierSeeds(lang).map((tier) => ({
+    ...tier,
+    highlights: tier.highlights.filter((h): h is string => h !== null),
+    price: formatMinorUnits(tier.priceCents),
+    originalPrice: formatMinorUnits(tier.originalPriceCents),
+  }));
+}
+
+/**
+ * The English tiers.
+ *
+ * Kept as a plain export because this is what the checkout route and every
+ * server-side price check read — those must not depend on what language a
+ * browser happened to be showing.
+ */
+export const passTiers: PassTier[] = getPassTiers("en");
 
 /** Narrows an untrusted value (request body, query string) to a real tier key. */
 export function isPassKey(value: unknown): value is PassKey {
@@ -191,8 +301,9 @@ export type PassComparisonRow = {
  * `experiences.ts` rather than transcribed — the table showed stale discounts
  * for months because those two were maintained by hand.
  */
-function experienceRow(experience: Experience): PassComparisonRow {
+function experienceRow(experience: Experience, lang: Locale): PassComparisonRow {
   const regular = regularPerPersonCents(experience);
+  const p = phrases(lang);
 
   const values = tierKeys.reduce((acc, tier) => {
     const entitlement = getEntitlement(tier, experience);
@@ -202,37 +313,41 @@ function experienceRow(experience: Experience): PassComparisonRow {
       !entitlement.entitled || cents === null || regular === null
         ? entitlement.entitled
         : {
-            regular: `${perPersonLabel(regular)}/pax`,
-            price: `${perPersonLabel(cents)}/pax`,
-            discount: `${formatDiscountPercent(entitlement.discountPercent)}% off`,
+            regular: p.perPax(perPersonLabel(regular)),
+            price: p.perPax(perPersonLabel(cents)),
+            discount: p.discount(entitlement.discountPercent),
           };
     return acc;
   }, {} as Record<PassKey, PassComparisonValue>);
 
-  return { label: experience.name, values };
+  return { label: localizeExperience(experience, lang).name, values };
 }
 
-const experienceRows: PassComparisonRow[] = comparedExperiences.map(experienceRow);
+/** The tier comparison table, worded for one locale. */
+export function getPassComparison(lang: Locale): PassComparisonRow[] {
+  const c = copy(lang);
+  const everyTier = (value: PassComparisonValue) => ({
+    silver: value,
+    gold: value,
+    platinum: value,
+  });
 
-export const passComparison: PassComparisonRow[] = [
-  {
-    label: "Retail deals",
-    values: { silver: "Up to MYR 15,000", gold: "Up to MYR 15,000", platinum: "Up to MYR 15,000" },
-  },
-  {
-    label: "Food & beverage deals",
-    values: { silver: "Up to MYR 3,000", gold: "Up to MYR 3,000", platinum: "Up to MYR 3,000" },
-  },
-  ...experienceRows,
-  {
-    label: "Travel & accident insurance",
-    values: { silver: false, gold: true, platinum: true },
-  },
-  {
-    label: "Private photography session",
-    values: { silver: false, gold: false, platinum: true },
-  },
-];
+  return [
+    { label: c.row.retail, values: everyTier(c.value.retailAmount) },
+    { label: c.row.fnb, values: everyTier(c.value.fnbAmount) },
+    ...comparedExperiences.map((experience) => experienceRow(experience, lang)),
+    {
+      label: c.row.insurance,
+      values: { silver: false, gold: true, platinum: true },
+    },
+    {
+      label: c.row.photography,
+      values: { silver: false, gold: false, platinum: true },
+    },
+  ];
+}
+
+export const passComparison: PassComparisonRow[] = getPassComparison("en");
 
 export type PassPerkCategory = {
   icon: string;
@@ -251,8 +366,16 @@ type PassPerkCategorySeed = Omit<PassPerkCategory, "tierNotes"> &
   ({ tierNotes: Partial<Record<PassKey, string>> } | { experienceKey: ExperienceKey });
 
 /** "25% off · MYR 390/pax (reg. MYR 520)" */
-function experienceTierNotes(experience: Experience): Partial<Record<PassKey, string>> {
+function experienceTierNotes(
+  experience: Experience,
+  lang: Locale
+): Partial<Record<PassKey, string>> {
+  const p = phrases(lang);
+  const localized = localizeExperience(experience, lang);
   const regular = regularPerPersonCents(experience);
+  // A group pack is a flat rate every entitled tier pays, so it reads the same
+  // on all of them — but it only belongs on tiers that can book at all.
+  const pack = localized.pricing.mode === "per-person" ? localized.pricing.groupPack : undefined;
   const notes: Partial<Record<PassKey, string>> = {};
 
   for (const tier of tierKeys) {
@@ -260,93 +383,92 @@ function experienceTierNotes(experience: Experience): Partial<Record<PassKey, st
     if (!entitlement.entitled) continue;
 
     const cents = tierPerPersonCents(experience, tier);
-    const percent = `${formatDiscountPercent(entitlement.discountPercent)}% off`;
+    const parts = [p.discount(entitlement.discountPercent)];
 
-    notes[tier] =
-      cents === null || regular === null
-        ? percent
-        : `${percent} · ${perPersonLabel(cents)}/pax (reg. ${perPersonLabel(regular)})`;
+    if (cents !== null && regular !== null) {
+      parts.push(
+        p.priceWithRegular(p.perPax(perPersonLabel(cents)), perPersonLabel(regular))
+      );
+    }
+
+    if (pack) {
+      parts.push(
+        p.packSummary(
+          pack.label,
+          perPersonLabel(pack.baseGroupCents),
+          pack.includedParticipants
+        )
+      );
+    }
+
+    notes[tier] = parts.join(p.separator);
   }
 
   return notes;
 }
 
-const passPerkCategorySeeds: PassPerkCategorySeed[] = [
-  {
-    icon: "bag",
-    img: "/privileges.png",
-    title: "Retail deals",
-    description:
-      "Save at partner shops and attractions across Malaysia, including Upside Down Museum Penang, BMS Organics, and Glass Museum Penang.",
-    tierNotes: {
-      silver: "Worth up to MYR 15,000",
-      gold: "Worth up to MYR 15,000",
-      platinum: "Worth up to MYR 15,000",
-    },
-  },
-  {
-    icon: "fork",
-    img: "/charkueyteow.jpg",
-    title: "Food & beverage deals",
-    description:
-      "Exclusive discounts at Starbucks, Le Petit Four Pâtisserie, Mixue, Family Mart, Hero Tea, Rendez by Meowcho, and more.",
-    tierNotes: {
-      silver: "Worth up to MYR 3,000",
-      gold: "Worth up to MYR 3,000",
-      platinum: "Worth up to MYR 3,000",
-    },
-  },
-  {
-    icon: "ticket",
-    img: "/lion-dance.webp",
-    title: "Lion Dance Experience",
-    description:
-      "Learn the basics of lion dance with authentic instruments and a traditional lion head. Sessions run Tuesday & Thursday 8:00–10:00 PM and Sunday 1:00–3:00 PM. Children aged 5 and under join free.",
-    experienceKey: "lion-dance",
-  },
-  {
-    icon: "landmark",
-    img: "/batik.jpg",
-    title: "Batik Painting Experience",
-    description:
-      "Discover the history behind Malaysian batik and create your own hand-painted souvenir, including museum admission and light refreshments. Runs Wednesday 10:00 AM–12:00 PM. Children aged 4 and under join free.",
-    experienceKey: "batik",
-  },
-  {
-    icon: "users",
-    img: "/food-malaysia.png",
-    title: "Indian Culture Experience",
-    description:
-      "Try your hand at kolam (rice-flour rangoli) art, a traditional Indian cooking lesson, and a Bharatanatyam dance demonstration. Runs Sunday 3:00–5:00 PM. Children aged 5 and under join free.",
-    experienceKey: "indian-culture",
-  },
-  {
-    icon: "shield",
-    img: "/tokio.png",
-    title: "Travel & accident insurance",
-    description:
-      "Group Personal Accident Insurance underwritten by Tokio Marine Insurans (Malaysia) Berhad, covering registered participants aged 30 days to 75 years while in Malaysia — including amateur sports, scuba diving up to 50m, and mountaineering.",
-    tierNotes: {
-      gold: "Up to MYR 50,000 accidental death & disablement · MYR 500 medical expenses",
-      platinum: "Up to MYR 50,000 accidental death & disablement · MYR 500 medical expenses",
-    },
-  },
-  {
-    icon: "camera",
-    img: "https://images.unsplash.com/photo-1596422846543-75c6fc197f07?auto=format&fit=crop&w=1000&q=85",
-    title: "Private photography session",
-    description:
-      "A 90-minute private photoshoot with a professional photographer around Penang's Heritage Zone or Batu Ferringhi hotels, plus 5 complimentary high-resolution photos and a highlight reel. Runs Saturday 8:30–10:00 AM and 10:00–11:30 AM.",
-    tierNotes: {
-      platinum: "From MYR 150 for 10 digital photos · Book at least 3 days ahead",
-    },
-  },
-];
+/**
+ * The perk list, worded for one locale.
+ *
+ * Each entry names a copy id; the title, description and any fixed tier note
+ * come from the copy tables above, while a perk backed by a bookable
+ * experience has its tier notes generated from live prices instead.
+ */
+function passPerkCategorySeeds(lang: Locale): PassPerkCategorySeed[] {
+  const c = copy(lang);
 
-export const passPerkCategories: PassPerkCategory[] = passPerkCategorySeeds.flatMap((seed) => {
-  if ("tierNotes" in seed) return [seed];
+  /** A perk whose per-tier note is the same fixed line on every listed tier. */
+  const fixed = (
+    id: string,
+    icon: string,
+    img: string,
+    tiers: PassKey[]
+  ): PassPerkCategorySeed => {
+    const perk = c.perk(id);
+    return {
+      icon,
+      img,
+      title: perk.title,
+      description: perk.description,
+      tierNotes: Object.fromEntries(tiers.map((tier) => [tier, perk.note ?? ""])),
+    };
+  };
 
-  const { experienceKey, ...rest } = seed;
-  const experience = getExperience(experienceKey);
-  return experience ? [{ ...rest, tierNotes: experienceTierNotes(experience) }] : [];
-});
+  const fromExperience = (
+    id: ExperienceKey,
+    icon: string,
+    img: string
+  ): PassPerkCategorySeed => {
+    const perk = c.perk(id);
+    return { icon, img, title: perk.title, description: perk.description, experienceKey: id };
+  };
+
+  return [
+    fixed("retail", "bag", "/privileges.png", tierKeys),
+    fixed("fnb", "fork", "/charkueyteow.jpg", tierKeys),
+    fromExperience("lion-dance", "ticket", "/lion-dance.webp"),
+    fromExperience("batik", "landmark", "/batik.jpg"),
+    fromExperience("indian-culture", "users", "/food-malaysia.png"),
+    fixed("insurance", "shield", "/tokio.png", ["gold", "platinum"]),
+    fixed(
+      "photography",
+      "camera",
+      "https://images.unsplash.com/photo-1596422846543-75c6fc197f07?auto=format&fit=crop&w=1000&q=85",
+      ["platinum"]
+    ),
+  ];
+}
+
+export function getPassPerkCategories(lang: Locale): PassPerkCategory[] {
+  return passPerkCategorySeeds(lang).flatMap((seed) => {
+    if ("tierNotes" in seed) return [seed];
+
+    const { experienceKey, ...rest } = seed;
+    const experience = getExperience(experienceKey);
+    return experience
+      ? [{ ...rest, tierNotes: experienceTierNotes(experience, lang) }]
+      : [];
+  });
+}
+
+export const passPerkCategories: PassPerkCategory[] = getPassPerkCategories("en");

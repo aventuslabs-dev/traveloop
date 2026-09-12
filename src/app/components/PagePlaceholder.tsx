@@ -1,17 +1,22 @@
 import Navbar from "./Navbar";
+import type enCommon from "@/i18n/dictionaries/en/common";
 
 export default function PagePlaceholder({
   eyebrow,
   title,
   body,
+  nav,
+  language,
 }: {
   eyebrow: string;
   title: string;
   body: string;
+  nav: typeof enCommon.nav;
+  language: typeof enCommon.language;
 }) {
   return (
     <>
-      <Navbar forceScrolled />
+      <Navbar dict={nav} language={language} forceScrolled />
       <main>
         <section className="arrival section-light" style={{ minHeight: "70svh" }}>
           <div className="section-heading centered">

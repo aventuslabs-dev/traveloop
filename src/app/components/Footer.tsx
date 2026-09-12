@@ -1,25 +1,42 @@
 import Image from "next/image";
-import Link from "next/link";
+import Link from "@/i18n/Link";
 import { Icon } from "./Icons";
+import type enCommon from "@/i18n/dictionaries/en/common";
 
-export default function Footer() {
+type FooterDict = typeof enCommon.footer;
+
+/** Renders a dictionary string that carries deliberate line breaks. */
+function Lines({ text }: { text: string }) {
+  return (
+    <>
+      {text.split("\n").map((line, i) => (
+        <span key={i}>
+          {i > 0 && <br />}
+          {line}
+        </span>
+      ))}
+    </>
+  );
+}
+
+export default function Footer({ dict }: { dict: FooterDict }) {
   return (
     <footer>
       <div className="footer-top">
         <div className="footer-brand">
           <Image src="/traveloop-logo.webp" alt="Traveloop" width={1280} height={345} />
-          <p>Experience Malaysia like never before.</p>
+          <p>{dict.tagline}</p>
           <div className="footer-links">
             <span
               className="footer-link-placeholder"
-              title="Instagram — coming soon"
+              title={dict.instagramSoon}
               aria-label="Instagram"
             >
               <Icon name="instagram" />
             </span>
             <span
               className="footer-link-placeholder"
-              title="TikTok — coming soon"
+              title={dict.tiktokSoon}
               aria-label="TikTok"
             >
               <Icon name="tiktok" />
@@ -28,16 +45,14 @@ export default function Footer() {
         </div>
 
         <div className="footer-col">
-          <h4>Get in touch</h4>
+          <h4>{dict.getInTouch}</h4>
           <address className="footer-contact">
             <span className="footer-contact-row">
               <span className="footer-contact-icon">
                 <Icon name="pin" />
               </span>
               <span>
-                50, Jalan Khaw Sim Bee, 10400, Georgetown,
-                <br />
-                Pulau Pinang, Malaysia
+                <Lines text={dict.address} />
               </span>
             </span>
             <a className="footer-contact-row" href="tel:+601139492888">
@@ -59,21 +74,19 @@ export default function Footer() {
         </div>
 
         <div className="footer-col">
-          <h4>Legal</h4>
+          <h4>{dict.legal}</h4>
           <div className="footer-legal-links">
-            <Link href="/terms">Terms of Service</Link>
-            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/terms">{dict.terms}</Link>
+            <Link href="/privacy">{dict.privacy}</Link>
           </div>
           <p className="footer-license">
-            MOTAC License: Malaysia Tours &amp; Travel Agency Sdn Bhd.
-            <br />
-            No Siri: P00266 / No. License: 0584
+            <Lines text={dict.license} />
           </p>
         </div>
       </div>
 
       <div className="footer-bottom">
-        <small>Copyright &copy; 2026 Traveloop. All Rights Reserved.</small>
+        <small>{dict.copyright}</small>
       </div>
     </footer>
   );

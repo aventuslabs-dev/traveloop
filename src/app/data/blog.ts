@@ -1,3 +1,4 @@
+import type { Locale } from "@/i18n/config";
 export type BlogCategory = "Culture" | "Food" | "Guides" | "Passes";
 
 /** Display order for category filters. Only categories with published posts are shown. */
@@ -349,17 +350,13 @@ export const blogPosts: BlogPost[] = [
           "75% off the Lion Dance Experience — our deepest discount.",
           "A dedicated professional photographer for 90 minutes.",
           "5 complimentary high-resolution edited digital photos.",
-          "1 complimentary highlight reel created from your photoshoot.",
+          "1 complimentary 30-second video created from your photoshoot.",
           "Priority support throughout your trip.",
         ],
       },
-      { type: "para", text: "For the photography session, you can choose between two locations:" },
       {
-        type: "list",
-        items: [
-          "Kuala Lumpur — KLCC or Bukit Bintang",
-          "Penang — the Penang Heritage Zone and hotels in Batu Ferringhi",
-        ],
+        type: "para",
+        text: "The photography session is shot in George Town's UNESCO heritage zone, for up to 7 people.",
       },
 
       { type: "heading", text: "Why a Privilege Card instead of separate vouchers?" },
@@ -383,4 +380,67 @@ export const blogFilters: Array<BlogCategory | "All"> = ["All", ...blogCategorie
 
 export function getPostBySlug(slug: string) {
   return blogPosts.find((p) => p.slug === slug);
+}
+
+/* ------------------------------------------------------------------ */
+/* Localized display                                                   */
+/* ------------------------------------------------------------------ */
+
+/** A post with its text swapped for the chosen locale. */
+export type LocalizedBlogPost = BlogPost & {
+  /** Translated category name for display; `category` stays the English key. */
+  categoryLabel: string;
+};
+
+function localizeAuthor(author: BlogAuthor, roles: Record<string, string>): BlogAuthor {
+  return { ...author, role: roles[author.role] ?? author.role };
+}
+
+/**
+ * Every post, in one locale.
+ *
+ * The slug is deliberately not translated: one article has one URL in both
+ * languages, so the switcher can move between them and a shared link opens the
+ * same piece whichever site it came from.
+ */
+export async function getBlogPosts(lang: Locale): Promise<LocalizedBlogPost[]> {
+  if (lang === "en") {
+    return blogPosts.map((post) => ({ ...post, categoryLabel: post.category }));
+  }
+
+  const { postCopyCn, categoryLabelsCn, authorRoleLabelsCn } = await import("./cn/blog");
+
+  return blogPosts.map((post) => {
+    const copy = postCopyCn[post.slug];
+    return {
+      ...post,
+      title: copy?.title ?? post.title,
+      excerpt: copy?.excerpt ?? post.excerpt,
+      readTime: copy?.readTime ?? post.readTime,
+      body: copy?.body ?? post.body,
+      author: localizeAuthor(post.author, authorRoleLabelsCn),
+      categoryLabel: categoryLabelsCn[post.category] ?? post.category,
+    };
+  });
+}
+
+export async function getLocalizedPostBySlug(
+  slug: string,
+  lang: Locale
+): Promise<LocalizedBlogPost | undefined> {
+  return (await getBlogPosts(lang)).find((post) => post.slug === slug);
+}
+
+/** Category filter labels, keyed by the English category. */
+export async function getBlogCategoryLabels(
+  lang: Locale
+): Promise<Record<BlogCategory, string>> {
+  if (lang === "en") {
+    return Object.fromEntries(categoryOrder.map((c) => [c, c])) as Record<
+      BlogCategory,
+      string
+    >;
+  }
+  const { categoryLabelsCn } = await import("./cn/blog");
+  return categoryLabelsCn;
 }

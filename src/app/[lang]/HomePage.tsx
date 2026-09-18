@@ -9,7 +9,16 @@ import { Icon } from "@/app/components/Icons";
 import type { LocalizedPartner } from "@/app/data/partners";
 import type { PassTier } from "@/app/data/passes";
 import { PassStack } from "@/app/components/PassCard";
-import { useVideoPlayer, VideoStage, VideoControls, VideoCloseButton, type VideoPlayer } from "@/app/components/VideoPlayer";
+import {
+  useVideoPlayer,
+  VideoStage,
+  VideoControls,
+  VideoCloseButton,
+  youtube,
+  selfHosted,
+  type VideoPlayer,
+  type VideoSource,
+} from "@/app/components/VideoPlayer";
 import { fill } from "@/i18n/interpolate";
 import type enCommon from "@/i18n/dictionaries/en/common";
 import type enHome from "@/i18n/dictionaries/en/home";
@@ -90,17 +99,21 @@ export default function Home({
   const heroBgRef = useRef<HTMLDivElement>(null);
   const filmModalRef = useRef<HTMLDialogElement>(null);
   const filmVideoId = "8V7czbc0kxg";
-  // Video ids are fixed; the titles shown in the player follow the locale.
+  // Sources are fixed; the titles shown in the player follow the locale.
   const destinationVideos = {
-    kualaLumpur: { id: "cvT7CyFJ76I", name: dict.discover.places.kualaLumpur.name },
-    langkawi: { id: "l1YiY-OaS9I", name: dict.discover.places.langkawi.name },
-    penang: { id: "4GUPqwMWDUY", name: dict.discover.places.penang.name },
+    kualaLumpur: {
+      source: youtube("cvT7CyFJ76I"),
+      name: dict.discover.places.kualaLumpur.name,
+    },
+    langkawi: { source: youtube("l1YiY-OaS9I"), name: dict.discover.places.langkawi.name },
+    // Penang plays our own footage from public/ rather than YouTube.
+    penang: { source: selfHosted("/penang.mov"), name: dict.discover.places.penang.name },
   };
 
-  function playFilm(videoId: string, title: string) {
+  function playFilm(source: VideoSource, title: string) {
     const modal = filmModalRef.current;
     modal?.showModal();
-    film.start(videoId, title);
+    film.start(source, title);
     // On mobile, drop into real browser fullscreen (hides the address bar
     // like a native player) and try to lock landscape. Both are best-effort:
     // iOS Safari has no orientation.lock, so it silently no-ops there and the
@@ -120,11 +133,11 @@ export default function Home({
 
   // On mobile the ambient in-section player is cramped, so tapping Play Video
   // opens the same fullscreen dialog used for "Watch the story" instead.
-  function playAmbientOrFullscreen(player: VideoPlayer, videoId: string, title: string) {
+  function playAmbientOrFullscreen(player: VideoPlayer, source: VideoSource, title: string) {
     if (window.matchMedia("(max-width: 640px)").matches) {
-      playFilm(videoId, title);
+      playFilm(source, title);
     } else {
-      player.start(videoId, title);
+      player.start(source, title);
     }
   }
 
@@ -263,7 +276,7 @@ export default function Home({
               </a>
               <button
                 className="button ghost"
-                onClick={() => playFilm(filmVideoId, dict.hero.filmTitle)}
+                onClick={() => playFilm(youtube(filmVideoId), dict.hero.filmTitle)}
               >
                 {dict.hero.watchStory} <span>▶</span>
               </button>
@@ -291,7 +304,7 @@ export default function Home({
               className="discover-tile tile-heritage reveal"
               onClick={() =>
                 playFilm(
-                  destinationVideos.penang.id,
+                  destinationVideos.penang.source,
                   `${destinationVideos.penang.name} — Traveloop`
                 )
               }
@@ -366,7 +379,7 @@ export default function Home({
               type="button"
               className="play-video-btn"
               onClick={() =>
-                playAmbientOrFullscreen(lion, "qLRp1pvOLr4", dict.experiences.lion.videoTitle)
+                playAmbientOrFullscreen(lion, youtube("qLRp1pvOLr4"), dict.experiences.lion.videoTitle)
               }
               aria-label={dict.experiences.lion.playAria}
             >
@@ -398,7 +411,7 @@ export default function Home({
               type="button"
               className="play-video-btn"
               onClick={() =>
-                playAmbientOrFullscreen(batik, "qLRp1pvOLr4", dict.experiences.batik.videoTitle)
+                playAmbientOrFullscreen(batik, youtube("qLRp1pvOLr4"), dict.experiences.batik.videoTitle)
               }
               aria-label={dict.experiences.batik.playAria}
             >
@@ -431,7 +444,7 @@ export default function Home({
               type="button"
               className="play-video-btn"
               onClick={() =>
-                playAmbientOrFullscreen(indian, "qLRp1pvOLr4", dict.experiences.indian.videoTitle)
+                playAmbientOrFullscreen(indian, youtube("qLRp1pvOLr4"), dict.experiences.indian.videoTitle)
               }
               aria-label={dict.experiences.indian.playAria}
             >
@@ -463,7 +476,7 @@ export default function Home({
               type="button"
               className="play-video-btn on-light"
               onClick={() =>
-                playAmbientOrFullscreen(taste, tasteVideoId, dict.taste.videoTitle)
+                playAmbientOrFullscreen(taste, youtube(tasteVideoId), dict.taste.videoTitle)
               }
               aria-label={dict.taste.playAria}
             >

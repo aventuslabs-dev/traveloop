@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type SyntheticEvent,
+} from "react";
 
 /**
  * The bits of the YouTube IFrame API this file actually uses. Typing them
@@ -49,6 +56,18 @@ declare global {
     onYouTubeIframeAPIReady?: () => void;
   }
 }
+
+/**
+ * Where a player gets its footage. YouTube carries most of the site; `file`
+ * is for clips we host ourselves under `public/`, which play through a plain
+ * <video> element but keep the same shield and custom control bar.
+ */
+export type VideoSource =
+  | { kind: "youtube"; id: string }
+  | { kind: "file"; src: string };
+
+export const youtube = (id: string): VideoSource => ({ kind: "youtube", id });
+export const selfHosted = (src: string): VideoSource => ({ kind: "file", src });
 
 function loadYouTubeApi(): Promise<void> {
   return new Promise((resolve) => {
@@ -119,20 +138,42 @@ export function useVideoPlayer() {
   const [muted, setMuted] = useState(true);
   const [quality, setQuality] = useState("auto");
   const [availableQualities, setAvailableQualities] = useState<string[]>([]);
+  const [source, setSource] = useState<VideoSource | null>(null);
+  const [title, setTitle] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const fileRef = useRef<HTMLVideoElement | null>(null);
   const playerRef = useRef<YTPlayer | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const userPickedQuality = useRef(false);
-  const activeVideoId = useRef<string | null>(null);
+  const activeSourceKey = useRef<string | null>(null);
 
-  function start(videoId: string, title?: string) {
-    activeVideoId.current = videoId;
+  const sourceKey = (s: VideoSource) => (s.kind === "youtube" ? s.id : s.src);
+
+  function start(next: VideoSource, nextTitle?: string) {
+    const key = sourceKey(next);
+    activeSourceKey.current = key;
+    setSource(next);
+    setTitle(nextTitle ?? null);
     setPlaying(true);
     setPaused(true);
+    setFailed(false);
     userPickedQuality.current = false;
+
+    if (next.kind === "file") {
+      // A self-hosted clip has no quality ladder to offer, and the <video>
+      // element it plays through only exists after the next commit — so the
+      // effect below takes it from here.
+      setAvailableQualities([]);
+      setQuality("auto");
+      return;
+    }
+
+    const videoId = next.id;
+    const title = nextTitle;
     loadYouTubeApi().then(() => {
       // Ignore a stale load if the caller moved on to a different video
       // (e.g. rapidly clicking between destination cards).
-      if (activeVideoId.current !== videoId) return;
+      if (activeSourceKey.current !== videoId) return;
       playerRef.current?.destroy?.();
       playerRef.current = new window.YT.Player(elementId, {
         width: "1920",
@@ -182,14 +223,49 @@ export function useVideoPlayer() {
     });
   }
 
+  /**
+   * A self-hosted clip reports its own state through these, which VideoStage
+   * spreads onto the <video> element. Every one of them also re-captures the
+   * element itself, so the control bar always has something to drive without
+   * the hook ever holding a ref that travels through props.
+   */
+  const fileEvents = {
+    onLoadedMetadata: (e: SyntheticEvent<HTMLVideoElement>) => {
+      const el = e.currentTarget;
+      fileRef.current = el;
+      setDuration(Number.isFinite(el.duration) ? el.duration : 0);
+      setVolume(Math.round(el.volume * 100));
+      setMuted(el.muted);
+    },
+    onDurationChange: (e: SyntheticEvent<HTMLVideoElement>) => {
+      const el = e.currentTarget;
+      setDuration(Number.isFinite(el.duration) ? el.duration : 0);
+    },
+    onTimeUpdate: (e: SyntheticEvent<HTMLVideoElement>) => {
+      fileRef.current = e.currentTarget;
+      setCurrentTime(e.currentTarget.currentTime);
+    },
+    onPlay: (e: SyntheticEvent<HTMLVideoElement>) => {
+      fileRef.current = e.currentTarget;
+      setPaused(false);
+    },
+    onPause: () => setPaused(true),
+    onError: () => setFailed(true),
+  };
+
   function stop() {
-    activeVideoId.current = null;
+    activeSourceKey.current = null;
+    fileRef.current?.pause();
+    fileRef.current = null;
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
     playerRef.current?.destroy?.();
     playerRef.current = null;
+    setSource(null);
+    setTitle(null);
+    setFailed(false);
     setPlaying(false);
     setPaused(true);
     setCurrentTime(0);
@@ -206,7 +282,16 @@ export function useVideoPlayer() {
     setQuality(level === "default" ? "auto" : level);
   }
 
+  const isFile = source?.kind === "file";
+
   function togglePlayPause() {
+    if (isFile) {
+      const el = fileRef.current;
+      if (!el) return;
+      if (el.paused) el.play().catch(() => {});
+      else el.pause();
+      return;
+    }
     if (!playerRef.current) return;
     if (paused) {
       playerRef.current.playVideo();
@@ -218,10 +303,22 @@ export function useVideoPlayer() {
   function seek(e: ChangeEvent<HTMLInputElement>) {
     const value = Number(e.target.value);
     setCurrentTime(value);
+    if (isFile) {
+      const el = fileRef.current;
+      if (el) el.currentTime = value;
+      return;
+    }
     playerRef.current?.seekTo(value, true);
   }
 
   function toggleMute() {
+    if (isFile) {
+      const el = fileRef.current;
+      if (!el) return;
+      el.muted = !el.muted;
+      setMuted(el.muted);
+      return;
+    }
     if (!playerRef.current) return;
     if (muted) {
       playerRef.current.unMute();
@@ -235,6 +332,15 @@ export function useVideoPlayer() {
   function handleVolume(e: ChangeEvent<HTMLInputElement>) {
     const value = Number(e.target.value);
     setVolume(value);
+    if (isFile) {
+      const el = fileRef.current;
+      if (el) {
+        el.volume = value / 100;
+        el.muted = value === 0;
+        setMuted(value === 0);
+      }
+      return;
+    }
     playerRef.current?.setVolume(value);
     if (value === 0) {
       setMuted(true);
@@ -254,6 +360,10 @@ export function useVideoPlayer() {
 
   return {
     elementId,
+    source,
+    title,
+    failed,
+    fileEvents,
     playing,
     paused,
     currentTime,
@@ -274,15 +384,37 @@ export function useVideoPlayer() {
 
 export type VideoPlayer = ReturnType<typeof useVideoPlayer>;
 
-/** Mount point YT.Player replaces with its iframe, plus the cover shield
- * that masks YouTube's own paused/cued frame until playback truly starts. */
+/** Mount point YT.Player replaces with its iframe — or, for a self-hosted
+ * source, the <video> element itself — plus the cover shield that masks the
+ * player's own paused/cued frame until playback truly starts. */
 export function VideoStage({ player }: { player: VideoPlayer }) {
   return (
     <>
-      <div id={player.elementId} />
-      <div className={`video-shield${player.paused ? "" : " is-hidden"}`} aria-hidden="true">
+      {player.source?.kind === "file" ? (
+        <video
+          {...player.fileEvents}
+          className="video-file"
+          src={player.source.src}
+          title={player.title ?? undefined}
+          preload="metadata"
+          autoPlay
+          playsInline
+          muted
+        />
+      ) : (
+        <div id={player.elementId} />
+      )}
+      <div
+        className={`video-shield${player.paused && !player.failed ? "" : " is-hidden"}`}
+        aria-hidden="true"
+      >
         <span className="video-spinner" />
       </div>
+      {player.failed && (
+        <p className="video-error" role="status">
+          This video couldn&rsquo;t be played in your browser.
+        </p>
+      )}
     </>
   );
 }

@@ -174,7 +174,7 @@ export const experiences: Experience[] = [
       },
     },
     discountByTier: { silver: 25, gold: 50, platinum: 75 },
-    participants: { min: 2, max: 20, label: "Participants" },
+    participants: { min: 1, max: 20, label: "Participants" },
     freeChildAgeUnder: 6,
     knowBeforeYouGo: [
       "Wear comfortable clothing and closed shoes you can move in.",

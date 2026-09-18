@@ -1,6 +1,5 @@
 import {
   formatAmount,
-  formatDiscountPercent,
   getEntitlement,
   getExperience,
   localizeExperience,

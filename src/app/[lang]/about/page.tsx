@@ -7,14 +7,6 @@ import { localePage, type LangParams } from "@/i18n/page";
 import JsonLd from "@/app/components/JsonLd";
 import { breadcrumbJsonLd, jsonLdGraph } from "@/lib/seo";
 
-function initials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-}
-
 export default async function AboutPage({ params }: LangParams) {
   const { lang, dict } = await localePage(params);
   const t = dict.about;
@@ -25,15 +17,6 @@ export default async function AboutPage({ params }: LangParams) {
     { icon: "ticket", ...t.values.items.simplicity },
     { icon: "camera", ...t.values.items.memories },
   ];
-
-  // Placeholder people: the roles are real, the names and bios are not yet.
-  const team = [
-    t.team.roles.ceo,
-    t.team.roles.coo,
-    t.team.roles.partnerships,
-    t.team.roles.experience,
-    t.team.roles.developer,
-  ].map((role) => ({ role, name: t.team.placeholderName, bio: t.team.placeholderBio }));
 
   return (
     <>
@@ -95,23 +78,14 @@ export default async function AboutPage({ params }: LangParams) {
           </div>
         </section>
 
-        <section className="section-light team-section">
-          <div className="section-heading centered">
-            <h2>{t.team.heading}</h2>
-            <p>{t.team.subheading}</p>
-            <p className="eyebrow team-founded">{t.team.founded}</p>
-          </div>
-          <div className="team-grid">
-            {team.map((m) => (
-              <article className="team-card" key={m.role}>
-                <span className="team-avatar">{initials(m.name)}</span>
-                <h3>{m.name}</h3>
-                <p className="team-role">{m.role}</p>
-                <p className="team-bio">{m.bio}</p>
-              </article>
-            ))}
-          </div>
-        </section>
+        {/*
+          "Meet the team" is out until there are real people to put in it. It
+          rendered five cards all reading "Name" with a bio that said a bio was
+          coming — on the page whose whole job is to make the company look like
+          someone you'd hand your passport details to. The copy for it is still
+          in the dictionaries under `about.team`, and the section styles are
+          still in globals.css, so restoring it is this block coming back.
+        */}
 
         <section className="closing section-dark">
           <div className="closing-bg">

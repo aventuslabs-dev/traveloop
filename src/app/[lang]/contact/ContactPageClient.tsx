@@ -199,7 +199,7 @@ export default function ContactPageClient({
               <div className="contact-info">
                 <a
                   className="contact-card"
-                  href="https://wa.me/60123456789"
+                  href="https://wa.me/601139492888"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -210,7 +210,7 @@ export default function ContactPageClient({
                   </span>
                   <span className="contact-card-body">
                     <strong>{dict.cards.whatsappTitle}</strong>
-                    <span>+60 12-345 6789</span>
+                    <span>+6011-3949-2888</span>
                   </span>
                 </a>
 

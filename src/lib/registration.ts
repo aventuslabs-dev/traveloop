@@ -53,9 +53,42 @@ function optionalString(value: unknown): string | null {
   return cleaned === "" ? null : cleaned.slice(0, MAX_FIELD_LENGTH);
 }
 
+/**
+ * The fields this validator can complain about. The key is what travels; the
+ * reader-facing name for it lives in each locale's dictionary, because
+ * "address" has to become "地址" for a buyer on /cn.
+ */
+export type RegistrationField =
+  | "fullName"
+  | "nationality"
+  | "arrivalDate"
+  | "departureDate"
+  | "travelDocumentType"
+  | "travelDocumentNumber"
+  | "address";
+
+/**
+ * Why a registration was rejected, as a key plus whatever the sentence needs
+ * to name — never as a finished English sentence.
+ *
+ * This module runs on the server for a form that exists in two languages, so
+ * it cannot know which words the buyer reads. The caller translates, at the
+ * point where the locale is known (see `api/checkout/route.ts`). Returning
+ * English from here is how a Chinese shopper used to hit "Please provide your
+ * address." at the exact moment they were trying to pay.
+ */
+export type RegistrationError =
+  | { key: "detailsRequired" }
+  | { key: "missingField"; field: RegistrationField }
+  | { key: "fieldTooLong"; field: RegistrationField }
+  | { key: "invalidArrivalDate" }
+  | { key: "invalidDepartureDate" }
+  | { key: "dateOrder" }
+  | { key: "termsNotAccepted" };
+
 export type ParseResult =
   | { ok: true; value: PassRegistration }
-  | { ok: false; error: string };
+  | { ok: false; error: RegistrationError };
 
 /**
  * Validates a registration submitted by the browser. The client validates too,
@@ -63,7 +96,7 @@ export type ParseResult =
  */
 export function parseRegistration(input: unknown): ParseResult {
   if (typeof input !== "object" || input === null) {
-    return { ok: false, error: "Registration details are required." };
+    return { ok: false, error: { key: "detailsRequired" } };
   }
 
   const raw = input as Record<string, unknown>;
@@ -76,35 +109,35 @@ export function parseRegistration(input: unknown): ParseResult {
   const travelDocumentNumber = cleanString(raw.travelDocumentNumber);
   const address = cleanString(raw.address);
 
-  const required: [string, string][] = [
-    ["full name", fullName],
+  const required: [RegistrationField, string][] = [
+    ["fullName", fullName],
     ["nationality", nationality],
-    ["arrival date", arrivalDate],
-    ["departure date", departureDate],
-    ["travel document type", travelDocumentType],
-    ["travel document number", travelDocumentNumber],
+    ["arrivalDate", arrivalDate],
+    ["departureDate", departureDate],
+    ["travelDocumentType", travelDocumentType],
+    ["travelDocumentNumber", travelDocumentNumber],
     ["address", address],
   ];
 
-  for (const [label, value] of required) {
-    if (!value) return { ok: false, error: `Please provide your ${label}.` };
+  for (const [field, value] of required) {
+    if (!value) return { ok: false, error: { key: "missingField", field } };
     if (value.length > MAX_FIELD_LENGTH) {
-      return { ok: false, error: `Your ${label} is too long.` };
+      return { ok: false, error: { key: "fieldTooLong", field } };
     }
   }
 
   if (!ISO_DATE.test(arrivalDate) || Number.isNaN(Date.parse(arrivalDate))) {
-    return { ok: false, error: "Please provide a valid arrival date." };
+    return { ok: false, error: { key: "invalidArrivalDate" } };
   }
   if (!ISO_DATE.test(departureDate) || Number.isNaN(Date.parse(departureDate))) {
-    return { ok: false, error: "Please provide a valid departure date." };
+    return { ok: false, error: { key: "invalidDepartureDate" } };
   }
   if (Date.parse(departureDate) < Date.parse(arrivalDate)) {
-    return { ok: false, error: "Your departure date must be on or after your arrival date." };
+    return { ok: false, error: { key: "dateOrder" } };
   }
 
   if (raw.termsAccepted !== true) {
-    return { ok: false, error: "Please accept the Terms & Conditions to continue." };
+    return { ok: false, error: { key: "termsNotAccepted" } };
   }
 
   return {

@@ -44,6 +44,7 @@ export default async function RegisterPage({ params, searchParams }: RegisterPag
             passTiers={getPassTiers(lang)}
             seedPassKey={seedTier?.key}
             dict={dict.registration}
+            insurance={dict.insurance}
           />
         </div>
       </main>

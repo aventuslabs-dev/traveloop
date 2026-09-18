@@ -13,6 +13,9 @@ import {
   SlotFullError,
 } from "@/lib/experience-bookings-db";
 import { sendBookingRequestEmail, sendBookingAdminAlert } from "@/lib/email";
+import { actionLocale } from "@/i18n/server";
+import { getDictionary } from "@/i18n/dictionaries";
+import { bookingErrorMessage } from "@/i18n/errors";
 
 export type BookingFormState = { error: string | null };
 
@@ -40,8 +43,12 @@ export async function createBooking(
   const orders = await getOrdersByUserId(user.id);
   const parsed = parseBookingForm(formData, { userId: user.id, orders });
 
+  // Every message below is read by the person who just submitted the form, so
+  // it follows the locale they submitted from rather than the site default.
+  const { bookings: t } = await getDictionary(await actionLocale());
+
   if (!parsed.ok) {
-    return { error: parsed.error };
+    return { error: bookingErrorMessage(parsed.error, t.errors) };
   }
 
   let booking;
@@ -49,15 +56,13 @@ export async function createBooking(
     booking = await insertBooking(parsed.value);
   } catch (error) {
     if (error instanceof DuplicateBookingError) {
-      return {
-        error: "You already have a booking for this experience. Check your bookings below.",
-      };
+      return { error: t.errors.duplicate };
     }
     if (error instanceof SlotFullError) {
-      return { error: "That session just filled up. Please choose another date or time." };
+      return { error: t.errors.slotFull };
     }
     console.error("[bookings] Failed to create booking:", error);
-    return { error: "We couldn't save your booking. Please try again in a moment." };
+    return { error: t.errors.saveFailed };
   }
 
   // The booking exists and is the record that matters — a mail hiccup must not

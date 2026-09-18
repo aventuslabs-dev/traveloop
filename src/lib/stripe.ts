@@ -32,6 +32,27 @@ export function getStripe(): Stripe {
   }
 
   /**
+   * The publishable key (pk_…) sits directly above the secret one in the
+   * Stripe dashboard and is the easier of the two to copy by mistake — it is
+   * also the one that is *safe* to hand around, so it is the one that turns up
+   * in chats and tickets. It cannot create a Checkout Session: Stripe would
+   * reject the call with an opaque auth error at the exact moment a buyer
+   * tried to pay. Naming the mistake here costs one comparison.
+   *
+   * This app never needs a publishable key at all — checkout is Stripe's
+   * hosted page, reached by redirecting to the session URL, so no Stripe code
+   * runs in the browser.
+   */
+  if (!/^(sk|rk)_/.test(secretKey)) {
+    throw new Error(
+      `STRIPE_SECRET_KEY is ${
+        secretKey.startsWith("pk_") ? "a publishable key (pk_…)" : "not a Stripe secret key"
+      }. It must be the secret key, which starts with sk_ (or rk_ for a ` +
+        "restricted key): Stripe Dashboard > Developers > API keys > Secret key > Reveal."
+    );
+  }
+
+  /**
    * A test key on the live site is the worst failure this file can allow:
    * Stripe accepts the payment, the buyer gets a receipt, and no money ever
    * moves. Failing the request is recoverable — a silent month of unpaid

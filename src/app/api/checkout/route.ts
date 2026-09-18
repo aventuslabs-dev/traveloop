@@ -5,11 +5,31 @@ import { getSiteUrl, getStripe, isPaymentsBypassEnabled, siteIsPubliclyReachable
 import { PASS_CURRENCY, getPassTier } from "@/app/data/passes";
 import { fulfillPassOrder, type PassOrder, type PassOrderItem } from "@/lib/fulfillment";
 import { parseRegistration } from "@/lib/registration";
+import { actionLocale } from "@/i18n/server";
+import { getDictionary, type Dictionary } from "@/i18n/dictionaries";
+import { registrationErrorMessage } from "@/i18n/errors";
+import { fill } from "@/i18n/interpolate";
 import { insertCheckoutDraft, type DraftItem } from "@/lib/checkout-drafts-db";
 
 export const runtime = "nodejs";
 
 const MAX_ITEMS = 20;
+
+/**
+ * An error response the buyer will actually read, in the language they are
+ * buying in.
+ *
+ * The register page shows `error` from this route verbatim, so an English
+ * string here lands in the middle of a Chinese checkout. `actionLocale` reads
+ * the Referer of the fetch, which is the /en or /cn page that made it.
+ */
+async function fail(
+  pick: (t: Dictionary["registration"]["errors"]) => string,
+  status: number
+): Promise<NextResponse> {
+  const { registration } = await getDictionary(await actionLocale());
+  return NextResponse.json({ error: pick(registration.errors) }, { status });
+}
 
 /**
  * Creates a Stripe Checkout Session for a cart of one or more passes and
@@ -27,6 +47,9 @@ export async function POST(request: Request) {
   let body: unknown;
   try {
     body = await request.json();
+    // Not localized, here or for "Unknown pass tier." below: the form cannot
+    // produce either one. They answer a hand-made request, and the only reader
+    // is whoever wrote it.
   } catch {
     return NextResponse.json({ error: "Expected a JSON body." }, { status: 400 });
   }
@@ -34,10 +57,10 @@ export async function POST(request: Request) {
   const { items: rawItems } = (body ?? {}) as { items?: unknown };
 
   if (!Array.isArray(rawItems) || rawItems.length === 0) {
-    return NextResponse.json({ error: "Your cart is empty." }, { status: 400 });
+    return fail((t) => t.cartEmpty, 400);
   }
   if (rawItems.length > MAX_ITEMS) {
-    return NextResponse.json({ error: `A single order can include at most ${MAX_ITEMS} passes.` }, { status: 400 });
+    return fail((t) => fill(t.tooManyPasses, { max: MAX_ITEMS }), 400);
   }
 
   const items: DraftItem[] = [];
@@ -51,7 +74,7 @@ export async function POST(request: Request) {
 
     const parsed = parseRegistration(registration);
     if (!parsed.ok) {
-      return NextResponse.json({ error: parsed.error }, { status: 400 });
+      return fail((t) => registrationErrorMessage(parsed.error, t), 400);
     }
 
     items.push({
@@ -132,13 +155,9 @@ export async function POST(request: Request) {
       error instanceof Stripe.errors.StripeAuthenticationError ||
       (error instanceof Error && error.message.includes("STRIPE_SECRET_KEY"));
 
-    return NextResponse.json(
-      {
-        error: isConfigError
-          ? "Payments aren't configured yet. Please contact us to complete your purchase."
-          : "We couldn't start checkout. Please try again in a moment.",
-      },
-      { status: isConfigError ? 503 : 500 }
+    return fail(
+      (t) => (isConfigError ? t.paymentsUnavailable : t.checkoutFailed),
+      isConfigError ? 503 : 500
     );
   }
 }

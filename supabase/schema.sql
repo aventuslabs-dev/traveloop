@@ -234,3 +234,37 @@ create policy "Customers can view their own pass registrations"
 
 create index if not exists pass_registrations_order_idx on pass_registrations (order_session_id);
 create index if not exists pass_registrations_user_idx on pass_registrations (user_id, created_at desc);
+
+-- Looks up the Auth account for an email address.
+--
+-- Fulfilment has to answer "does this buyer already have an account?" before it
+-- tries to create one. It used to ask the orders table, which only knows about
+-- people who have *bought* something: an Urban Sprint player, the operator, or
+-- anyone whose first purchase half-failed came back "no account", createUser
+-- then failed on the duplicate email, and the order was stored with no user_id
+-- at all — invisible in the customer's portal, with no welcome email.
+--
+-- auth.users is the authoritative answer and is not reachable over PostgREST,
+-- hence this function. security definer is what lets it read that schema;
+-- search_path is pinned so the body cannot be redirected by a caller's own
+-- search_path, and execute is granted to nobody, leaving service_role (which
+-- bypasses grants) as the only caller.
+--
+-- Emails are compared case-insensitively: Supabase Auth stores them lowercased,
+-- but Stripe hands back whatever the buyer typed.
+create or replace function public.auth_user_id_for_email(p_email text)
+returns uuid
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select id
+  from auth.users
+  where lower(email) = lower(p_email)
+  order by created_at
+  limit 1;
+$$;
+
+revoke all on function public.auth_user_id_for_email(text) from public;
+revoke all on function public.auth_user_id_for_email(text) from anon, authenticated;

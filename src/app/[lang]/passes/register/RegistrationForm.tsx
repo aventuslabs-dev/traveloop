@@ -17,6 +17,7 @@ import {
 } from "@/app/data/cn/registration";
 import type { Locale } from "@/i18n/config";
 import type enRegistration from "@/i18n/dictionaries/en/registration";
+import type { InsuranceDoc } from "@/i18n/legal";
 
 type RegistrationDict = typeof enRegistration;
 
@@ -24,6 +25,8 @@ type RegistrationFormProps = {
   passTiers: PassTier[];
   seedPassKey?: PassKey;
   dict: RegistrationDict;
+  /** The insurance contract, in the locale being bought in. */
+  insurance: InsuranceDoc;
 };
 
 type CartItem = {
@@ -79,6 +82,7 @@ export default function RegistrationForm({
   passTiers,
   seedPassKey,
   dict,
+  insurance,
 }: RegistrationFormProps) {
   const lang = useLocale();
   const [cart, setCart] = useState<CartItem[]>(seedPassKey ? [newCartItem(seedPassKey)] : []);
@@ -127,7 +131,7 @@ export default function RegistrationForm({
 
     const fields = fieldsFor(cart[activeIndex].id);
     if (Date.parse(fields.departureDate) < Date.parse(fields.arrivalDate)) {
-      setError(dict.details.dateOrder);
+      setError(dict.errors.dateOrder);
       return;
     }
 
@@ -325,7 +329,7 @@ export default function RegistrationForm({
       </p>
 
       <div className="terms-scroll">
-        <InsuranceTerms />
+        <InsuranceTerms dict={insurance} />
       </div>
 
       <label className="register-consent">

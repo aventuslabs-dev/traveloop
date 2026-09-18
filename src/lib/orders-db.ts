@@ -194,26 +194,39 @@ export async function getOrdersByUserId(userId: string): Promise<StoredOrder[]> 
 }
 
 /**
- * The Supabase Auth user id already linked to a previous order for this
- * email, if any — lets fulfilment reuse an existing account instead of
- * creating a duplicate one on repeat purchases.
+ * Escapes an email for use as an ILIKE *pattern* rather than a value.
+ *
+ * `%` and `_` are wildcards to ILIKE and both are legal in an email
+ * local-part — `_` especially so. Unescaped, `a_b@example.com` matches
+ * `axb@example.com`, which on the read below returns a stranger's account and
+ * on the update below hands a stranger's unlinked orders to this user, invoice
+ * and all. Postgres takes backslash as the escape character by default.
+ */
+function likeLiteral(value: string): string {
+  return value.replace(/([\\%_])/g, "\\$1");
+}
+
+/**
+ * The Supabase Auth user id for this email address, or null if nobody has an
+ * account under it.
+ *
+ * Asks `auth.users` through a security-definer function (see schema.sql)
+ * rather than looking for a previous order. An account can exist without ever
+ * having bought anything — an Urban Sprint player, the operator, a buyer whose
+ * first order failed part-way — and answering "no account" for one of those
+ * sends fulfilment into a createUser that fails on the duplicate email, which
+ * it then treats as a race and gives up on, leaving the order unlinked.
  */
 export async function findUserIdByEmail(email: string): Promise<string | null> {
   const db = getSupabase();
 
-  const { data, error } = await db
-    .from("orders")
-    .select("user_id")
-    .ilike("customer_email", email)
-    .not("user_id", "is", null)
-    .limit(1)
-    .maybeSingle<{ user_id: string }>();
+  const { data, error } = await db.rpc("auth_user_id_for_email", { p_email: email });
 
   if (error) {
     throw new Error(`Failed to look up account for ${email}: ${error.message}`);
   }
 
-  return data?.user_id ?? null;
+  return (data as string | null) ?? null;
 }
 
 /** Lazily links any pre-existing, unlinked orders for this email once their account is created. */
@@ -223,7 +236,7 @@ export async function backfillOrdersForEmail(email: string, userId: string): Pro
   const { error } = await db
     .from("orders")
     .update({ user_id: userId })
-    .ilike("customer_email", email)
+    .ilike("customer_email", likeLiteral(email))
     .is("user_id", null);
 
   if (error) {

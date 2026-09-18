@@ -5,6 +5,7 @@ import "@/app/globals.css";
 import { getDictionary } from "@/i18n/dictionaries";
 import { htmlLang, isLocale, locales, ogLocale } from "@/i18n/config";
 import LanguageBanner from "@/app/components/LanguageBanner";
+import CookieNotice from "@/app/components/CookieNotice";
 import JsonLd from "@/app/components/JsonLd";
 import {
   jsonLdGraph,
@@ -172,7 +173,15 @@ export default async function RootLayout({
           )}
         />
         {children}
-        <LanguageBanner lang={lang} />
+        {/*
+          Both bottom-corner notices live in one stack so they cannot land on
+          top of each other — a first-time Chinese-speaking visitor sees both
+          at once. See `.site-notices` in globals.css.
+        */}
+        <div className="site-notices">
+          <LanguageBanner lang={lang} />
+          <CookieNotice dict={common.cookies} />
+        </div>
       </body>
     </html>
   );

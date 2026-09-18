@@ -26,9 +26,32 @@ import type { NewBooking, StoredBooking } from "./experience-bookings-db";
  * tier on the order the customer actually owns.
  */
 
+/**
+ * Why a booking was refused, as a key plus the values its sentence names.
+ *
+ * Same reason as `RegistrationError` in lib/registration.ts: this runs on the
+ * server for a form that exists in two languages, so the words belong to the
+ * caller, which knows the locale. The names carried here (`passName`,
+ * `experienceName`, `packLabel`, `location`) are already localized by the
+ * caller before they reach this function — they come off the catalogue the
+ * customer was actually shown.
+ */
+export type BookingError =
+  | { key: "unknownExperience" }
+  | { key: "noPassChosen" }
+  | { key: "notEntitled"; passName: string; experienceName: string }
+  /** `withinTrip` picks the variant that also mentions the buyer's trip dates. */
+  | { key: "slotUnavailable"; leadDays: number; withinTrip: boolean }
+  | { key: "participantRange"; min: number; max: number }
+  | { key: "invalidChildren" }
+  | { key: "packageRequired" }
+  | { key: "packMinimum"; packLabel: string; min: number }
+  | { key: "locationRequired" }
+  | { key: "locationComingSoon"; location: string };
+
 export type BookingParseResult =
   | { ok: true; value: NewBooking; experience: Experience }
-  | { ok: false; error: string };
+  | { ok: false; error: BookingError };
 
 const MAX_NOTES_LENGTH = 500;
 
@@ -47,7 +70,7 @@ export function parseBookingForm(
 ): BookingParseResult {
   const experience = getExperience(text(formData, "experienceKey"));
   if (!experience) {
-    return { ok: false, error: "We couldn't find that experience." };
+    return { ok: false, error: { key: "unknownExperience" } };
   }
 
   // The pass is chosen by the customer (they may hold several), so confirm the
@@ -56,14 +79,18 @@ export function parseBookingForm(
     (candidate) => candidate.sessionId === text(formData, "orderSessionId")
   );
   if (!order) {
-    return { ok: false, error: "Please choose which pass you're booking with." };
+    return { ok: false, error: { key: "noPassChosen" } };
   }
 
   const entitlement = getEntitlement(order.passKey, experience);
   if (!entitlement.entitled) {
     return {
       ok: false,
-      error: `Your ${order.passName} Pass doesn't include the ${experience.name}.`,
+      error: {
+        key: "notEntitled",
+        passName: order.passName,
+        experienceName: experience.name,
+      },
     };
   }
 
@@ -79,9 +106,11 @@ export function parseBookingForm(
   if (!slot) {
     return {
       ok: false,
-      error: `That session isn't available. Sessions must be booked at least ${BOOKING_LEAD_DAYS} days ahead${
-        order.arrivalDate && order.departureDate ? " and within your trip dates" : ""
-      }.`,
+      error: {
+        key: "slotUnavailable",
+        leadDays: BOOKING_LEAD_DAYS,
+        withinTrip: Boolean(order.arrivalDate && order.departureDate),
+      },
     };
   }
 
@@ -90,15 +119,12 @@ export function parseBookingForm(
   const { min, max } = experience.participants;
 
   if (Number.isNaN(participants) || participants < min || participants > max) {
-    return {
-      ok: false,
-      error: `Please choose between ${min} and ${max} participants.`,
-    };
+    return { ok: false, error: { key: "participantRange", min, max } };
   }
 
   const childrenCount = experience.freeChildAgeUnder ? count(formData, "childrenCount") : 0;
   if (Number.isNaN(childrenCount) || childrenCount < 0 || childrenCount > max) {
-    return { ok: false, error: "Please enter a valid number of children." };
+    return { ok: false, error: { key: "invalidChildren" } };
   }
 
   // --- Package ------------------------------------------------------------
@@ -107,7 +133,7 @@ export function parseBookingForm(
     const submitted = text(formData, "packageKey");
     const option = experience.pricing.options.find((o) => o.key === submitted);
     if (!option) {
-      return { ok: false, error: "Please choose a photo package." };
+      return { ok: false, error: { key: "packageRequired" } };
     }
     packageKey = option.key;
   } else if (experience.pricing.mode === "per-person" && experience.pricing.groupPack) {
@@ -123,7 +149,11 @@ export function parseBookingForm(
     if (wantsPack && !packAvailable(groupPack, participants)) {
       return {
         ok: false,
-        error: `The ${groupPack.label} needs at least ${groupPack.minParticipants} participants.`,
+        error: {
+          key: "packMinimum",
+          packLabel: groupPack.label,
+          min: groupPack.minParticipants,
+        },
       };
     }
 
@@ -136,10 +166,10 @@ export function parseBookingForm(
     const submitted = text(formData, "location");
     const option = experience.locationOptions.find((o) => o.value === submitted);
     if (!option) {
-      return { ok: false, error: "Please choose a location." };
+      return { ok: false, error: { key: "locationRequired" } };
     }
     if (option.comingSoon) {
-      return { ok: false, error: `${option.label} isn't available yet.` };
+      return { ok: false, error: { key: "locationComingSoon", location: option.label } };
     }
     location = option.value;
   }

@@ -42,6 +42,26 @@ const common = {
     close: "Close",
   },
 
+  /**
+   * The cookie notice. Informational rather than a consent gate: the site only
+   * sets cookies it needs to work — the locale the visitor chose, and the
+   * Supabase session for anyone signed in. Nothing here is for advertising and
+   * nothing tracks anyone across sites.
+   *
+   * That stops being true the day analytics is added. At that point this has
+   * to become a real consent prompt that blocks those scripts until it is
+   * answered, and "Got it" has to grow a "Reject" beside it.
+   */
+  cookies: {
+    /** Names the region for a screen reader that jumps to it. */
+    label: "Cookie notice",
+    text:
+      "We use only the cookies this site needs to work — remembering your " +
+      "language and keeping you signed in.",
+    policy: "Privacy Policy",
+    accept: "Got it",
+  },
+
   language: {
     /** Reads "Language" — labels the switcher for screen readers. */
     label: "Language",

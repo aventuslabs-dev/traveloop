@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
+import Link from "@/i18n/Link";
 import { createBooking, type BookingFormState } from "@/app/[lang]/account/booking-actions";
 import { Icon } from "@/app/components/Icons";
 import {
@@ -200,9 +201,9 @@ export default function BookingForm({
               ? ` between ${pass.tripLabel} — bookings need ${BOOKING_LEAD_DAYS} days' notice.`
               : "."}
           </p>
-          <a className="button ghost dark" href="/contact">
+          <Link className="button ghost dark" href="/contact">
             Talk to our team
-          </a>
+          </Link>
         </div>
       </div>
     );

@@ -26,7 +26,6 @@ const registration: typeof en = {
     back: "返回",
     next: "下一位登记人",
     toTerms: "继续阅读条款与条件",
-    dateOrder: "离境日期必须等于或晚于入境日期。",
   },
 
   terms: {
@@ -65,6 +64,30 @@ const registration: typeof en = {
   errors: {
     checkoutFailed: "无法开始结账流程，请再试一次。",
     network: "网络错误。请检查网络连接后重试。",
+
+    /** 服务端校验，对应 lib/registration.ts 的 RegistrationError。 */
+    cartEmpty: "购物车是空的。",
+    /** `{max}` 为单笔订单的通行证上限。 */
+    tooManyPasses: "单笔订单最多只能购买 {max} 张通行证。",
+    paymentsUnavailable: "支付功能尚未开通，请联系我们完成购买。",
+    detailsRequired: "请填写报名资料。",
+    missingField: "请填写{field}。",
+    fieldTooLong: "{field}过长。",
+    invalidArrivalDate: "请填写有效的入境日期。",
+    invalidDepartureDate: "请填写有效的离境日期。",
+    dateOrder: "离境日期必须等于或晚于入境日期。",
+    termsNotAccepted: "请先同意条款与条件，才能继续。",
+
+    /** 嵌入上面句子中的字段名称，因此不带标点。 */
+    fieldNames: {
+      fullName: "姓名",
+      nationality: "国籍",
+      arrivalDate: "入境日期",
+      departureDate: "离境日期",
+      travelDocumentType: "旅行证件类型",
+      travelDocumentNumber: "证件号码",
+      address: "地址",
+    },
   },
 };
 

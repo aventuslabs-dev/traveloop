@@ -37,10 +37,22 @@ export async function findOrCreateCustomerAccount(
   });
 
   if (error || !data.user) {
-    // Most likely a race: two near-simultaneous first purchases for the same
-    // email both missed the findUserIdByEmail lookup above. Rare enough not
-    // to retry — the next purchase for this email will find and reuse the
-    // winner's account via findUserIdByEmail.
+    /**
+     * Now that the lookup above asks auth.users rather than the orders table,
+     * reaching here means a genuine race: two near-simultaneous first
+     * purchases for the same email both missed it, and one lost.
+     *
+     * Look once more before giving up. The winner's account exists by now, and
+     * returning null instead would store this order with no `user_id` — absent
+     * from the buyer's portal, with no welcome email and no profile saved.
+     * That used to be the routine outcome for anyone who already had an
+     * account without ever having ordered.
+     */
+    const racedUserId = await findUserIdByEmail(email);
+    if (racedUserId) {
+      return { userId: racedUserId, isNew: false };
+    }
+
     console.error(`[customer-account] Failed to create account for ${email}:`, error);
     return { userId: null, isNew: false };
   }

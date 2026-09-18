@@ -39,6 +39,14 @@ const common: typeof en = {
     close: "关闭",
   },
 
+  /** Cookie 说明。仅告知，不是同意墙 —— 详见英文版注释。 */
+  cookies: {
+    label: "Cookie 说明",
+    text: "本站只使用维持网站运作所需的 Cookie：记住您选择的语言，以及保持登录状态。",
+    policy: "隐私政策",
+    accept: "知道了",
+  },
+
   language: {
     label: "语言",
     switchTo: "切换至{language}",

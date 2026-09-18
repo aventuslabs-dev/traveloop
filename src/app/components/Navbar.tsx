@@ -84,7 +84,7 @@ export default function Navbar({
       <LanguageSwitcher labels={language} className="nav-lang" />
       <a
         className="nav-whatsapp"
-        href="https://wa.me/60123456789"
+        href="https://wa.me/601139492888"
         target="_blank"
         rel="noopener noreferrer"
         aria-label={dict.whatsapp}

@@ -36,7 +36,6 @@ const registration = {
     back: "Back",
     next: "Next registrant",
     toTerms: "Continue to Terms & Conditions",
-    dateOrder: "Your departure date must be on or after your arrival date.",
   },
 
   terms: {
@@ -77,6 +76,35 @@ const registration = {
   errors: {
     checkoutFailed: "We couldn't start checkout. Please try again.",
     network: "Network error. Please check your connection and try again.",
+
+    /**
+     * Server-side validation, keyed by `RegistrationError` in lib/registration.ts.
+     * `{field}` is filled from `fieldNames` below, so the sentence and the field
+     * name are translated as a pair rather than glued together across languages.
+     */
+    cartEmpty: "Your cart is empty.",
+    /** `{max}` is the per-order pass limit. */
+    tooManyPasses: "A single order can include at most {max} passes.",
+    paymentsUnavailable:
+      "Payments aren't configured yet. Please contact us to complete your purchase.",
+    detailsRequired: "Registration details are required.",
+    missingField: "Please provide your {field}.",
+    fieldTooLong: "Your {field} is too long.",
+    invalidArrivalDate: "Please provide a valid arrival date.",
+    invalidDepartureDate: "Please provide a valid departure date.",
+    dateOrder: "Your departure date must be on or after your arrival date.",
+    termsNotAccepted: "Please accept the Terms & Conditions to continue.",
+
+    /** Lower-case: these are dropped into the middle of the sentences above. */
+    fieldNames: {
+      fullName: "full name",
+      nationality: "nationality",
+      arrivalDate: "arrival date",
+      departureDate: "departure date",
+      travelDocumentType: "travel document type",
+      travelDocumentNumber: "travel document number",
+      address: "address",
+    },
   },
 };
 

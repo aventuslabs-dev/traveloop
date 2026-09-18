@@ -286,7 +286,7 @@ export default function PassesPageClient({
               </Link>
               <a
                 className="button ghost"
-                href="https://wa.me/60123456789"
+                href="https://wa.me/601139492888"
                 target="_blank"
                 rel="noopener noreferrer"
               >

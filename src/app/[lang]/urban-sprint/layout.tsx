@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { OG_IMAGE } from "@/lib/seo";
 import "./urban-sprint.css";
 
 /**
@@ -10,6 +11,16 @@ import "./urban-sprint.css";
  * Traveloop site is untouched by anything the campaign does.
  */
 
+const OG_DESCRIPTION =
+  "A city-wide race through Traveloop's partner shops. Follow the leaderboard live.";
+
+/**
+ * The campaign writes its own titles in English only — it is run in person in
+ * George Town and has no translated copy — so this stays a static object.
+ * Canonicals and hreflang belong to the individual pages, which know their own
+ * path; setting them here would tell a crawler that every route under this
+ * layout is really /urban-sprint.
+ */
 export const metadata: Metadata = {
   title: {
     default: "Urban Sprint — a Traveloop campaign",
@@ -22,7 +33,14 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "Urban Sprint",
     title: "Urban Sprint — a Traveloop campaign",
-    description: "A city-wide race through Traveloop's partner shops. Follow the leaderboard live.",
+    description: OG_DESCRIPTION,
+    images: [{ ...OG_IMAGE, alt: "Traveloop — Urban Sprint" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Urban Sprint — a Traveloop campaign",
+    description: OG_DESCRIPTION,
+    images: [{ ...OG_IMAGE, alt: "Traveloop — Urban Sprint" }],
   },
 };
 

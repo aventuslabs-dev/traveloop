@@ -8,8 +8,14 @@
 const home = {
   meta: {
     title: "Traveloop — The Tourist Pass for Malaysia",
+    /**
+     * Kept under ~155 characters: past that a search result cuts the sentence
+     * off mid-clause. The longer version — the experiences named one by one,
+     * the Penang address — still reaches search engines through the structured
+     * data in the root layout, which has no such limit.
+     */
     description:
-      "Traveloop is a Malaysian tourist pass that bundles retail and dining deals, guided cultural experiences (lion dance, batik painting, Indian heritage) and Tokio Marine personal accident cover into one card. Based in Penang, Malaysia.",
+      "Traveloop is a Malaysian tourist pass: retail and dining deals, guided cultural experiences and Tokio Marine personal accident cover, all on one card.",
   },
 
   loader: "Your Malaysian story begins…",
@@ -54,6 +60,8 @@ const home = {
       "Every experience is thoughtfully curated to connect you with the people, " +
       "traditions, and culture that define the true spirit of Malaysia.",
     playVideo: "Play Video",
+    /** Shown in place of the play button until an experience has its footage. */
+    videoSoon: "Video coming soon",
 
     lion: {
       number: "01 / 03 · Chinese Culture",

@@ -23,18 +23,6 @@ import { fill } from "@/i18n/interpolate";
 import type enCommon from "@/i18n/dictionaries/en/common";
 import type enHome from "@/i18n/dictionaries/en/home";
 
-/** Mirrors the visible FAQ below so assistants and search engines read the same answers. */
-const faqJsonLd = (items: { question: string; answer: string }[]) => ({
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: items.map((item) => ({
-    "@type": "Question",
-    name: item.question,
-    acceptedAnswer: { "@type": "Answer", text: item.answer },
-  })),
-});
-
-
 export default function Home({
   dict,
   nav,
@@ -83,8 +71,13 @@ export default function Home({
   ];
 
   const tasteVideoId = "Jg0PRB5Aebo";
-  // TODO: swap these placeholder video IDs for the real Batik / Indian Heritage footage.
   const lion = useVideoPlayer();
+  /**
+   * Batik and Indian Heritage have no footage of their own yet, so their play
+   * buttons render greyed out (see the panels below) and these two players are
+   * never started. The wiring is left intact: once the clips exist, restoring
+   * each is one `onClick` back on its button.
+   */
   const batik = useVideoPlayer();
   const indian = useVideoPlayer();
   const taste = useVideoPlayer();
@@ -98,7 +91,12 @@ export default function Home({
   const progressRef = useRef<HTMLSpanElement>(null);
   const heroBgRef = useRef<HTMLDivElement>(null);
   const filmModalRef = useRef<HTMLDialogElement>(null);
-  const filmVideoId = "8V7czbc0kxg";
+  /**
+   * The hero's "Watch the story" film. Our own Penang footage rather than a
+   * YouTube embed — same clip the Penang destination card plays, so the visitor
+   * sees the real thing before any third-party player loads.
+   */
+  const filmSource = selfHosted("/penang.mp4");
   // Sources are fixed; the titles shown in the player follow the locale.
   const destinationVideos = {
     kualaLumpur: {
@@ -223,11 +221,6 @@ export default function Home({
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd(faqItems)) }}
-      />
-
       <div className="progress" aria-hidden="true">
         <span ref={progressRef}></span>
       </div>
@@ -276,7 +269,7 @@ export default function Home({
               </a>
               <button
                 className="button ghost"
-                onClick={() => playFilm(youtube(filmVideoId), dict.hero.filmTitle)}
+                onClick={() => playFilm(filmSource, dict.hero.filmTitle)}
               >
                 {dict.hero.watchStory} <span>▶</span>
               </button>
@@ -407,16 +400,16 @@ export default function Home({
               <em>{dict.experiences.batik.headingEm}</em>
             </h2>
             <p>{dict.experiences.batik.body}</p>
-            <button
-              type="button"
-              className="play-video-btn"
-              onClick={() =>
-                playAmbientOrFullscreen(batik, youtube("qLRp1pvOLr4"), dict.experiences.batik.videoTitle)
-              }
-              aria-label={dict.experiences.batik.playAria}
-            >
+            {/*
+              No batik footage has been shot yet. Until it exists the button
+              stays put but reads as unavailable — it used to play the lion
+              dance clip, which told the visitor they were about to watch batik
+              and then showed them something else. Its own text is the
+              accessible name, so no aria-label is needed.
+            */}
+            <button type="button" className="play-video-btn is-soon" disabled>
               <span className="play-video-icon">▶</span>
-              {dict.experiences.playVideo}
+              {dict.experiences.videoSoon}
             </button>
           </div>
           {batik.playing && <VideoControls player={batik} />}
@@ -440,16 +433,10 @@ export default function Home({
               <em>{dict.experiences.indian.headingEm}</em>
             </h2>
             <p>{dict.experiences.indian.body}</p>
-            <button
-              type="button"
-              className="play-video-btn"
-              onClick={() =>
-                playAmbientOrFullscreen(indian, youtube("qLRp1pvOLr4"), dict.experiences.indian.videoTitle)
-              }
-              aria-label={dict.experiences.indian.playAria}
-            >
+            {/* Same as batik above — awaiting its own footage. */}
+            <button type="button" className="play-video-btn is-soon" disabled>
               <span className="play-video-icon">▶</span>
-              {dict.experiences.playVideo}
+              {dict.experiences.videoSoon}
             </button>
           </div>
           {indian.playing && <VideoControls player={indian} />}

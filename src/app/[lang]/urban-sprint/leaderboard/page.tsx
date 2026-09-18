@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { isLocale } from "@/i18n/config";
+import { localeAlternates } from "@/i18n/metadata";
 import { getUrbanSprintSession, ROLE_HOME } from "@/lib/urban-sprint/auth";
 import { getLeaderboard } from "@/lib/urban-sprint/leaderboard-db";
 import { getSettings } from "@/lib/urban-sprint/settings-db";
@@ -10,10 +13,21 @@ import Leaderboard from "../_components/Leaderboard";
 import LiveRefresh from "../_components/LiveRefresh";
 import { LivePill, StatusPill, Wordmark, statusNote } from "../_components/ui";
 
-export const metadata: Metadata = {
-  title: "Leaderboard",
-  description: "Live standings for Urban Sprint — every team, every station, updating as it happens.",
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ lang: string }>;
+}): Promise<Metadata> {
+  const { lang } = await params;
+  if (!isLocale(lang)) notFound();
+
+  return {
+    title: "Leaderboard",
+    description:
+      "Live standings for Urban Sprint — every team, every station, updating as it happens.",
+    alternates: localeAlternates(lang, "/urban-sprint/leaderboard"),
+  };
+}
 
 /**
  * The full public board. Open to anyone, but if the viewer happens to be

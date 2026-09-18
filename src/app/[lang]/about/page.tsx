@@ -4,6 +4,8 @@ import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import { Icon } from "@/app/components/Icons";
 import { localePage, type LangParams } from "@/i18n/page";
+import JsonLd from "@/app/components/JsonLd";
+import { breadcrumbJsonLd, jsonLdGraph } from "@/lib/seo";
 
 function initials(name: string) {
   return name
@@ -14,7 +16,7 @@ function initials(name: string) {
 }
 
 export default async function AboutPage({ params }: LangParams) {
-  const { dict } = await localePage(params);
+  const { lang, dict } = await localePage(params);
   const t = dict.about;
 
   const values = [
@@ -35,6 +37,13 @@ export default async function AboutPage({ params }: LangParams) {
 
   return (
     <>
+      <JsonLd
+        json={jsonLdGraph(
+          breadcrumbJsonLd(lang, dict.common.nav.home, [
+            { name: dict.common.nav.about, path: "/about" },
+          ])
+        )}
+      />
       <Navbar dict={dict.common.nav} language={dict.common.language} forceScrolled />
       <main id="main">
         <section className="arrival section-light page-hero about-hero">

@@ -15,6 +15,10 @@ const common = {
       "Traveloop is a Malaysian tourist pass that bundles retail and dining deals, " +
       "guided cultural experiences (lion dance, batik painting, Indian heritage) and " +
       "Tokio Marine personal accident cover into one card. Based in Penang, Malaysia.",
+    /** Alt text for the share card, read aloud when a link preview is. */
+    ogImageAlt:
+      "Two travellers looking out over the George Town skyline at sunset, " +
+      "under the Traveloop wordmark.",
   },
 
   nav: {

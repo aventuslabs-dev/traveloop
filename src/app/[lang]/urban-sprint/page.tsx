@@ -1,4 +1,8 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { isLocale } from "@/i18n/config";
+import { localeAlternates } from "@/i18n/metadata";
 import { getUrbanSprintSession, ROLE_HOME } from "@/lib/urban-sprint/auth";
 import { getSettings } from "@/lib/urban-sprint/settings-db";
 import { getLeaderboard } from "@/lib/urban-sprint/leaderboard-db";
@@ -36,6 +40,22 @@ const HOW_IT_WORKS = [
     body: "Points land the moment a station is confirmed, booster bonus included. The leaderboard reorders live.",
   },
 ];
+
+/**
+ * Title and description come from the layout; this adds the pair of tags the
+ * layout cannot know — which URL is canonical, and where the other locale's
+ * copy of this page lives. Both are in the sitemap, so both need them.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ lang: string }>;
+}): Promise<Metadata> {
+  const { lang } = await params;
+  if (!isLocale(lang)) notFound();
+
+  return { alternates: localeAlternates(lang, "/urban-sprint") };
+}
 
 export default async function UrbanSprintLandingPage() {
   const [settings, board, stats, session] = await Promise.all([

@@ -35,7 +35,9 @@ export default function Navbar({
     { href: "/about", label: dict.about },
     { href: "/partners", label: dict.partners },
     { href: "/blogs", label: dict.blogs },
-    { href: "/urban-sprint", label: dict.urbanSprint },
+    // Urban Sprint is reached by its own campaign links and poster QR codes,
+    // not from the main site nav. The routes and the `urbanSprint` label stay
+    // in place so it can be added back without a translation round.
     { href: "/contact", label: dict.contact },
   ];
 

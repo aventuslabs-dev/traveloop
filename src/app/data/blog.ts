@@ -1,4 +1,4 @@
-import type { Locale } from "@/i18n/config";
+import { htmlLang, type Locale } from "@/i18n/config";
 export type BlogCategory = "Culture" | "Food" | "Guides" | "Passes";
 
 /** Display order for category filters. Only categories with published posts are shown. */
@@ -9,12 +9,38 @@ export type BlogAuthor = {
   role: string;
   initials: string;
   accent: "blue" | "red" | "navy";
+  /**
+   * Whether the byline is a human or the company.
+   *
+   * Only structured data reads this, and it has to be right: an article
+   * credited to "Traveloop Team" as a `Person` describes someone who does not
+   * exist, which is the kind of mismatch that costs a site its rich results.
+   */
+  kind: "person" | "organization";
 };
 
 export const blogAuthors = {
-  aina: { name: "Aina Rahman", role: "Culture Writer", initials: "AR", accent: "red" },
-  danial: { name: "Danial Hakim", role: "Food Editor", initials: "DH", accent: "blue" },
-  team: { name: "Traveloop Team", role: "Editorial", initials: "TL", accent: "navy" },
+  aina: {
+    name: "Aina Rahman",
+    role: "Culture Writer",
+    initials: "AR",
+    accent: "red",
+    kind: "person",
+  },
+  danial: {
+    name: "Danial Hakim",
+    role: "Food Editor",
+    initials: "DH",
+    accent: "blue",
+    kind: "person",
+  },
+  team: {
+    name: "Traveloop Team",
+    role: "Editorial",
+    initials: "TL",
+    accent: "navy",
+    kind: "organization",
+  },
 } satisfies Record<string, BlogAuthor>;
 
 export type BlogPhrase = {
@@ -39,9 +65,26 @@ export type BlogPost = {
   category: BlogCategory;
   title: string;
   excerpt: string;
-  date: string;
+  /**
+   * Publication date as ISO 8601 (YYYY-MM-DD).
+   *
+   * Stored machine-readable rather than as the words on the card: it is what
+   * `datePublished` in the article's structured data and `lastModified` in the
+   * sitemap need, and it lets each locale format the date its own way instead
+   * of showing Chinese readers an English month.
+   */
+  published: string;
+  /** Set only once a published post has been revised; drives `dateModified`. */
+  updated?: string;
   readTime: string;
   img: string;
+  /**
+   * A 1200x630 crop of `img` for share cards, written by
+   * `scripts/generate-brand-assets.mjs`. Covers are shot for the page — one is
+   * a tall portrait — and social platforms crop anything else through the
+   * middle. A post without one falls back to the site-wide card.
+   */
+  ogImage?: string;
   author: BlogAuthor;
   /** "primary" = the big spotlight card, "secondary" = the smaller spotlight cards beside it */
   spotlight?: "primary" | "secondary";
@@ -56,9 +99,10 @@ export const blogPosts: BlogPost[] = [
     title: "25 Malay Phrases You Should Know When Travelling in Malaysia",
     excerpt:
       "Malaysia is a melting pot of cultures, and Bahasa Melayu is the thread that ties it together. You don't need to be fluent — these 25 everyday phrases are enough to order food, haggle at a market, and find your way around.",
-    date: "Jul 30, 2026",
+    published: "2026-07-30",
     readTime: "7 min read",
     img: "/blog-malay-phrases.jpg",
+    ogImage: "/og/25-malay-phrases-to-learn-before-visiting-malaysia.jpg",
     author: blogAuthors.team,
     spotlight: "primary",
     body: [
@@ -258,9 +302,10 @@ export const blogPosts: BlogPost[] = [
     title: "Everything You Need to Know About Traveloop Malaysia",
     excerpt:
       "Planning a trip to Malaysia sounds exciting — and it is — but there's almost too much to choose from. Here's who we are, why we started, and what's inside each Privilege Card.",
-    date: "Jul 27, 2026",
+    published: "2026-07-27",
     readTime: "5 min read",
     img: "/blog-traveloop-intro.jpg",
+    ogImage: "/og/traveloop-malaysia-all-you-need-to-know.jpg",
     author: blogAuthors.team,
     spotlight: "secondary",
     body: [
@@ -390,7 +435,24 @@ export function getPostBySlug(slug: string) {
 export type LocalizedBlogPost = BlogPost & {
   /** Translated category name for display; `category` stays the English key. */
   categoryLabel: string;
+  /** `published`, written the way this locale writes dates. */
+  date: string;
 };
+
+/**
+ * "2026-07-30" -> "Jul 30, 2026" / "2026年7月30日".
+ *
+ * Pinned to UTC: the bare date parses as UTC midnight, and formatting it in a
+ * timezone behind UTC would print the day before.
+ */
+function displayDate(iso: string, lang: Locale): string {
+  return new Intl.DateTimeFormat(htmlLang[lang], {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${iso}T00:00:00Z`));
+}
 
 function localizeAuthor(author: BlogAuthor, roles: Record<string, string>): BlogAuthor {
   return { ...author, role: roles[author.role] ?? author.role };
@@ -405,7 +467,11 @@ function localizeAuthor(author: BlogAuthor, roles: Record<string, string>): Blog
  */
 export async function getBlogPosts(lang: Locale): Promise<LocalizedBlogPost[]> {
   if (lang === "en") {
-    return blogPosts.map((post) => ({ ...post, categoryLabel: post.category }));
+    return blogPosts.map((post) => ({
+      ...post,
+      categoryLabel: post.category,
+      date: displayDate(post.published, lang),
+    }));
   }
 
   const { postCopyCn, categoryLabelsCn, authorRoleLabelsCn } = await import("./cn/blog");
@@ -420,6 +486,7 @@ export async function getBlogPosts(lang: Locale): Promise<LocalizedBlogPost[]> {
       body: copy?.body ?? post.body,
       author: localizeAuthor(post.author, authorRoleLabelsCn),
       categoryLabel: categoryLabelsCn[post.category] ?? post.category,
+      date: displayDate(post.published, lang),
     };
   });
 }

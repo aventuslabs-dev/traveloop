@@ -296,7 +296,24 @@ h1,h2,h3 { margin-top: 0; }
 .play-video-btn { display:inline-flex;align-items:center;gap:14px;margin-top:20px;padding:8px 28px 8px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.08);color:#fff;font-size:14px;font-weight:700;letter-spacing:.01em;cursor:pointer;backdrop-filter:blur(10px);transition:background .25s ease,border-color .25s ease,color .25s ease,transform .25s ease,opacity .25s ease,box-shadow .25s ease; }
 .play-video-btn:hover, .play-video-btn:focus-visible { background:var(--red);border-color:var(--red);transform:scale(1.03); }
 .play-video-btn:focus-visible { outline:2px solid #fff; outline-offset:3px; }
+/* Hides the button while its own video is playing. */
 .play-video-btn:disabled { opacity:0;pointer-events:none; }
+/* An experience whose footage hasn't been shot yet: the button stays in place
+   — dropping it would leave the panel a row shorter than its neighbours — but
+   greys out so it reads as not-yet rather than broken. The rule above hides a
+   disabled button outright, so the opacity has to be put back, and :hover
+   still matches on a disabled button, so its scale and red fill are undone. */
+.play-video-btn.is-soon:disabled {
+  opacity:1;cursor:default;transform:none;
+  border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.05);color:rgba(255,255,255,.58);
+}
+/* `:disabled` is carried on these two so they outrank `.play-video-btn:hover
+   .play-video-icon`, which is otherwise the same specificity and declared
+   later — a disabled button still matches :hover, so without it the icon
+   grows under the cursor on a button that does nothing. */
+.play-video-btn.is-soon:disabled .play-video-icon { background:rgba(255,255,255,.16);color:rgba(255,255,255,.6);transform:none; }
+.play-video-btn.is-soon.on-light:disabled { border-color:var(--line);background:rgba(16,26,44,.04);color:var(--muted);box-shadow:none; }
+.play-video-btn.is-soon.on-light:disabled .play-video-icon { background:rgba(16,26,44,.1);color:var(--muted); }
 .play-video-btn.on-light { border-color:rgba(16,26,44,.12); background:var(--warm-white); color:var(--ink); box-shadow:0 6px 18px rgba(16,26,44,.08); }
 .play-video-btn.on-light:hover { background:var(--red); border-color:var(--red); color:#fff; box-shadow:0 10px 26px rgba(215,41,54,.3); }
 .play-video-icon { width:40px;height:40px;border-radius:50%;background:var(--red);display:grid;place-items:center;font-size:15px;flex-shrink:0; transition:transform .25s ease; }
@@ -1026,14 +1043,20 @@ a.contact-card:hover { transform:translateY(-3px); box-shadow:0 18px 40px rgba(8
 
 @media (max-width: 640px) {
   /* Phone nav is a fixed budget: logo + WhatsApp + WeChat + burger only just
-     fit. The 36px desktop gap and the language pill push the burger off the
-     right edge entirely, so both are trimmed here. */
+     fit, and the 36px desktop gap is trimmed to buy back room. */
   .nav { height:72px;padding:0 18px;gap:14px; }
   .nav-cta { display:none; }
-  /* The switcher stays in the bar on phones — it is also repeated in the
-     mobile menu, but a visitor should not have to open a menu to find it. */
-  .lang-switch-option { min-width:44px; padding:0 9px; font-size:11px; }
-  .brand { width:140px; }
+  /* The language pill moves into the burger menu here, where `.nav-mobile-lang`
+     renders it full-width. Shrinking it to fit alongside the logo and the two
+     chat buttons was costing ~110px of a ~360px bar — enough to crowd the
+     burger against the right edge — and left the two options at 11px, below
+     the size a thumb can hit reliably. In the menu it gets a 44px row. */
+  .nav-lang { display:none; }
+  /* The bar's four remaining items are all fixed-width, so the logo is the
+     only thing that can give. Below ~380px a flat 140px still overflows and
+     `overflow-x:hidden` clips the burger — losing the visitor every link on
+     the site. Scaling it keeps the whole bar on screen down to 320px. */
+  .brand { width:clamp(112px,34vw,140px); }
   .hero h1 { font-size:54px; }
   .hero-copy { width:100%;font-size:16px; }
   .hero-bg-img { object-position:78% 55%; }

@@ -1,10 +1,18 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { DM_Sans, Noto_Sans_SC, Playfair_Display, Sora } from "next/font/google";
 import "@/app/globals.css";
 import { getDictionary } from "@/i18n/dictionaries";
-import { htmlLang, isLocale, locales, ogLocale, type Locale } from "@/i18n/config";
+import { htmlLang, isLocale, locales, ogLocale } from "@/i18n/config";
 import LanguageBanner from "@/app/components/LanguageBanner";
+import JsonLd from "@/app/components/JsonLd";
+import {
+  jsonLdGraph,
+  OG_IMAGE,
+  organizationJsonLd,
+  SITE_URL,
+  websiteJsonLd,
+} from "@/lib/seo";
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -38,8 +46,6 @@ const notoSansSC = Noto_Sans_SC({
   weight: ["400", "500", "700"],
   display: "swap",
 });
-
-const SITE_URL = "https://traveloop.my";
 
 export async function generateStaticParams() {
   return locales.map((lang) => ({ lang }));
@@ -82,46 +88,57 @@ export async function generateMetadata({
       url: `/${lang}`,
       title: common.site.title,
       description: common.site.description,
-      images: ["/hero3.png"],
+      images: [{ ...OG_IMAGE, alt: common.site.ogImageAlt }],
     },
     twitter: {
       card: "summary_large_image",
       title: common.site.title,
       description: common.site.description,
-      images: ["/hero3.png"],
+      images: [{ ...OG_IMAGE, alt: common.site.ogImageAlt }],
     },
-    robots: { index: true, follow: true },
+    /**
+     * Declared rather than left to the `app/icon.*` file conventions: this
+     * root layout sits inside `[lang]`, so a convention file would be resolved
+     * per locale segment. Listing them here emits one set of tags for every
+     * route, whatever its prefix.
+     *
+     * The SVG comes first and modern browsers stop there; `favicon.ico` is the
+     * fallback for the ones that don't read SVG, and for the bare
+     * `/favicon.ico` request browsers make with no tag at all.
+     */
+    icons: {
+      icon: [
+        { url: "/icon.svg", type: "image/svg+xml" },
+        { url: "/favicon.ico", sizes: "48x48" },
+      ],
+      apple: { url: "/apple-icon.png", sizes: "180x180" },
+    },
+    manifest: "/manifest.webmanifest",
+    robots: {
+      index: true,
+      follow: true,
+      // Lets Google show full-length previews and large image thumbnails
+      // instead of the short snippet it defaults to for some regions.
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-snippet": -1,
+        "max-image-preview": "large",
+        "max-video-preview": -1,
+      },
+    },
   };
 }
 
 /**
- * Entity facts for AI assistants and search engines: who Traveloop is, where
- * it operates, and what it sells. Kept in the root layout so it appears on
- * every page rather than only the homepage. The prose fields follow the
- * locale; the address and contact details are the same in both.
+ * Tints the browser chrome on Android and the iOS status bar to the brand
+ * blue. Separate from `metadata` because Next moved viewport-level tags into
+ * their own export.
  */
-const organizationJsonLd = (lang: Locale, name: string, description: string) => ({
-  "@context": "https://schema.org",
-  "@type": "TravelAgency",
-  "@id": `${SITE_URL}/#organization`,
-  name,
-  description,
-  url: `${SITE_URL}/${lang}`,
-  logo: `${SITE_URL}/traveloop-logo.webp`,
-  email: "partnership@traveloop.my",
-  telephone: "+601139492888",
-  inLanguage: htmlLang[lang],
-  areaServed: { "@type": "Country", name: "Malaysia" },
-  address: {
-    "@type": "PostalAddress",
-    streetAddress: "50, Jalan Khaw Sim Bee",
-    addressLocality: "Georgetown",
-    postalCode: "10400",
-    addressRegion: "Pulau Pinang",
-    addressCountry: "MY",
-  },
-  foundingDate: "2026",
-});
+export const viewport: Viewport = {
+  themeColor: "#244798",
+  colorScheme: "light",
+};
 
 export default async function RootLayout({
   children,
@@ -142,13 +159,17 @@ export default async function RootLayout({
       className={`${dmSans.variable} ${playfairDisplay.variable} ${sora.variable} ${notoSansSC.variable}`}
     >
       <body>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(
-              organizationJsonLd(lang, common.site.name, common.site.description)
-            ),
-          }}
+        {/*
+          Who Traveloop is and what this site is, on every page rather than
+          only the homepage — a crawler that lands on an article should still
+          learn which company published it. Pages add their own nodes (an
+          article, a pass, an FAQ) that point back at these by `@id`.
+        */}
+        <JsonLd
+          json={jsonLdGraph(
+            organizationJsonLd(lang, common.site.name, common.site.description),
+            websiteJsonLd(lang, common.site.name, common.site.description)
+          )}
         />
         {children}
         <LanguageBanner lang={lang} />

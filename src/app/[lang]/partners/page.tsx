@@ -1,5 +1,7 @@
 import { getPartners } from "@/app/data/partners";
 import { localePage, type LangParams } from "@/i18n/page";
+import JsonLd from "@/app/components/JsonLd";
+import { breadcrumbJsonLd, jsonLdGraph } from "@/lib/seo";
 import PartnersDirectory from "./PartnersDirectory";
 
 /**
@@ -15,12 +17,23 @@ export default async function PartnersPage({ params }: LangParams) {
   const partners = await getPartners(lang);
 
   return (
-    <PartnersDirectory
+    <>
+      {/* Puts "traveloop.my > Partners" under the search result rather than a
+          bare URL. */}
+      <JsonLd
+        json={jsonLdGraph(
+          breadcrumbJsonLd(lang, dict.common.nav.home, [
+            { name: dict.common.nav.partners, path: "/partners" },
+          ])
+        )}
+      />
+      <PartnersDirectory
       partners={partners}
       dict={dict.partners}
       nav={dict.common.nav}
       language={dict.common.language}
-      footer={dict.common.footer}
-    />
+        footer={dict.common.footer}
+      />
+    </>
   );
 }

@@ -13,9 +13,11 @@ import {
   type LocalizedBlogPost,
 } from "@/app/data/blog";
 import { getDictionary } from "@/i18n/dictionaries";
-import { htmlLang, isLocale, locales } from "@/i18n/config";
+import { isLocale, locales } from "@/i18n/config";
 import { localePage } from "@/i18n/page";
-import { fill } from "@/i18n/interpolate";
+import { pageMetadata } from "@/i18n/metadata";
+import JsonLd from "@/app/components/JsonLd";
+import { articleJsonLd, breadcrumbJsonLd, jsonLdGraph } from "@/lib/seo";
 
 type ArticleParams = { params: Promise<{ lang: string; slug: string }> };
 
@@ -37,30 +39,27 @@ export async function generateMetadata({ params }: ArticleParams): Promise<Metad
   const post = await getLocalizedPostBySlug(slug, lang);
   if (!post?.body) {
     const { common } = await getDictionary(lang);
-    return { title: common.notFound.title };
+    return { title: common.notFound.title, robots: { index: false, follow: true } };
   }
 
-  const path = `/blogs/${post.slug}`;
-
-  return {
-    title: post.title,
-    description: post.excerpt,
-    alternates: {
-      canonical: `/${lang}${path}`,
-      languages: {
-        ...Object.fromEntries(
-          locales.map((locale) => [htmlLang[locale], `/${locale}${path}`])
-        ),
-        "x-default": `/en${path}`,
-      },
-    },
-    openGraph: {
+  // The article's own cover makes the better share card, when one has been
+  // cropped to the card frame — alt text included, since a link preview is
+  // read aloud as often as it is looked at. Without one the helper falls back
+  // to the site-wide card rather than shipping a mis-cropped photo.
+  return pageMetadata(
+    params,
+    `/blogs/${post.slug}`,
+    () => ({ title: post.title, description: post.excerpt }),
+    {
       type: "article",
-      title: post.title,
-      description: post.excerpt,
-      images: [post.img],
-    },
-  };
+      image: post.ogImage
+        ? { url: post.ogImage, width: 1200, height: 630, alt: post.title }
+        : undefined,
+      publishedTime: post.published,
+      authors: [post.author.name],
+      section: post.categoryLabel,
+    }
+  );
 }
 
 function Block({ block }: { block: BlogBlock }) {
@@ -162,6 +161,30 @@ export default async function BlogPostPage({ params }: ArticleParams) {
 
   return (
     <>
+      {/*
+        The article as an entity: a headline, a byline, a date and the company
+        that published it, tied to the Organization node the root layout emits.
+        The breadcrumb repeats the path the nav already shows, which is what a
+        result gets to display instead of a bare URL.
+      */}
+      <JsonLd
+        json={jsonLdGraph(
+          articleJsonLd(lang, {
+            slug: post.slug,
+            title: post.title,
+            excerpt: post.excerpt,
+            images: post.ogImage ? [post.ogImage, post.img] : [post.img],
+            published: post.published,
+            updated: post.updated,
+            author: post.author,
+            section: post.categoryLabel,
+          }),
+          breadcrumbJsonLd(lang, dict.common.nav.home, [
+            { name: dict.common.nav.blogs, path: "/blogs" },
+            { name: post.title, path: `/blogs/${post.slug}` },
+          ])
+        )}
+      />
       <Navbar dict={dict.common.nav} language={dict.common.language} forceScrolled />
       <main id="main">
         <article>

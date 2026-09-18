@@ -9,6 +9,18 @@ import Stripe from "stripe";
  */
 let cached: Stripe | null = null;
 
+/**
+ * True only on the real production deployment.
+ *
+ * Vercel sets `VERCEL_ENV` to "production", "preview" or "development", while
+ * `NODE_ENV` is "production" for preview builds too. The difference matters
+ * here: previews are *meant* to run Stripe test keys, and production is the
+ * only place that must refuse them.
+ */
+export function isProductionDeployment(): boolean {
+  return process.env.VERCEL_ENV === "production";
+}
+
 export function getStripe(): Stripe {
   if (cached) return cached;
 
@@ -16,6 +28,19 @@ export function getStripe(): Stripe {
   if (!secretKey) {
     throw new Error(
       "STRIPE_SECRET_KEY is not set. Copy env.example to .env.local and fill in your Stripe keys."
+    );
+  }
+
+  /**
+   * A test key on the live site is the worst failure this file can allow:
+   * Stripe accepts the payment, the buyer gets a receipt, and no money ever
+   * moves. Failing the request is recoverable — a silent month of unpaid
+   * orders is not. Previews are exempt, since test keys are correct there.
+   */
+  if (isProductionDeployment() && secretKey.startsWith("sk_test_")) {
+    throw new Error(
+      "STRIPE_SECRET_KEY is a test key (sk_test_…) on the production deployment. " +
+        "Set the live key (sk_live_…) in Vercel > Settings > Environment Variables > Production."
     );
   }
 
@@ -56,15 +81,21 @@ export function siteIsPubliclyReachable(): boolean {
  * True when checkout should skip Stripe entirely and fulfil the order
  * directly, so the buyer flow can be tested before real Stripe keys exist.
  *
- * Opt in explicitly with PAYMENTS_TEST_MODE=true, or it activates itself
- * whenever STRIPE_SECRET_KEY is missing outside production — never in
- * production, even if the key was left unset by mistake.
+ * Only ever true on a developer's own machine. `PAYMENTS_TEST_MODE=true` used
+ * to force it on anywhere, including production, where it hands out real
+ * passes for free to anyone who finds the checkout button — one stray
+ * environment variable away from giving the product away. Any deployed build
+ * now refuses it outright, whatever the variable says; a deployment that wants
+ * to exercise checkout without taking money uses Stripe's own test keys, which
+ * is what they are for.
  */
 export function isPaymentsBypassEnabled(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+
   if (process.env.PAYMENTS_TEST_MODE === "true") return true;
   if (process.env.PAYMENTS_TEST_MODE === "false") return false;
 
   const key = process.env.STRIPE_SECRET_KEY;
   const looksConfigured = !!key && !key.includes("replace_me");
-  return !looksConfigured && process.env.NODE_ENV !== "production";
+  return !looksConfigured;
 }

@@ -1,12 +1,13 @@
 import { getSupabase } from "@/lib/supabase";
 import { countRecentFailedPayments } from "@/lib/payment-attempts-db";
+import { listCustomerAccounts } from "@/lib/customer-accounts-db";
 import { logout } from "../actions";
 import AdminShell from "./AdminShell";
 
 /**
- * Counts shown in the rail. They're cheap head-only queries and give the
- * operator a reason to trust the nav — "3 bookings" beside Bookings means
- * three things actually need looking at.
+ * Counts shown in the rail. They give the operator a reason to trust the nav —
+ * "3 bookings" beside Bookings means three things actually need looking at —
+ * which only holds if a badge counts exactly what its page lists.
  */
 async function loadCounts() {
   try {
@@ -17,14 +18,24 @@ async function loadCounts() {
         .from("experience_bookings")
         .select("*", { count: "exact", head: true })
         .eq("status", "pending"),
-      db.from("customer_profiles").select("*", { count: "exact", head: true }),
+      // Deliberately not a head count of customer_profiles, which this used to
+      // be and which counted the wrong thing twice over: it included the
+      // operator's own admin account (the customers page excludes it, so the
+      // rail said "1" over an empty table), and it counted profiles rather than
+      // accounts, hiding any customer whose profile write failed — something
+      // fulfilment treats as non-fatal and therefore does happen.
+      //
+      // Costs a paged listUsers instead of a head count. This console is
+      // low-traffic and the customers page already does exactly this work, so
+      // sharing one definition is worth more than the saved round trip.
+      listCustomerAccounts(),
       countRecentFailedPayments(),
     ]);
 
     return {
       orders: orders.count ?? 0,
       bookings: bookings.count ?? 0,
-      customers: customers.count ?? 0,
+      customers: customers.length,
       failedPayments,
     };
   } catch {

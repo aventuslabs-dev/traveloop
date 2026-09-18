@@ -46,3 +46,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Camera master for the Penang clip: 288MB, HEVC/QuickTime. The web-ready
+# H.264 transcode (public/penang.mp4) is what ships.
+public/penang.mov

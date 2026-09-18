@@ -107,7 +107,7 @@ export default function Home({
     },
     langkawi: { source: youtube("l1YiY-OaS9I"), name: dict.discover.places.langkawi.name },
     // Penang plays our own footage from public/ rather than YouTube.
-    penang: { source: selfHosted("/penang.mov"), name: dict.discover.places.penang.name },
+    penang: { source: selfHosted("/penang.mp4"), name: dict.discover.places.penang.name },
   };
 
   function playFilm(source: VideoSource, title: string) {

@@ -57,15 +57,26 @@ export type ExperiencePackage = {
  * A pack price is already the pass-holder rate, so no tier discount is applied
  * on top and every entitled tier pays the same for it. The customer chooses
  * between the pack and the per-person rate on the booking form.
+ *
+ * `minParticipants` is the headcount the pack unlocks at. It is tracked apart
+ * from `includedParticipants` because "who may buy this" and "how many it
+ * covers" are different questions — and because without it a party of two
+ * could take a four-person price.
  */
 export type ExperienceGroupPack = {
   key: string;
   label: string;
   baseGroupCents: number;
+  minParticipants: number;
   includedParticipants: number;
   extraPersonCents: number;
   note?: string;
 };
+
+/** Whether this booking is big enough to take the pack at all. */
+export function packAvailable(pack: ExperienceGroupPack, participants: number): boolean {
+  return participants >= pack.minParticipants;
+}
 
 /** The `packageKey` standing for "no pack taken — priced per person". */
 export const PER_PERSON_PRICE_KEY = "per-person";
@@ -168,13 +179,14 @@ export const experiences: Experience[] = [
         key: "family-pack",
         label: "Family Pack",
         baseGroupCents: 40_000,
+        minParticipants: 4,
         includedParticipants: 4,
         extraPersonCents: 10_000,
         note: "One price for up to 4 — additional participants MYR 100 each",
       },
     },
     discountByTier: { silver: 25, gold: 50, platinum: 75 },
-    participants: { min: 2, max: 20, label: "Participants" },
+    participants: { min: 1, max: 20, label: "Participants" },
     freeChildAgeUnder: 6,
     knowBeforeYouGo: [
       "Wear comfortable clothing and closed shoes you can move in.",
@@ -484,7 +496,7 @@ export function quoteBooking(
       // everyone coming — that's what the booking would cost without a pass.
       regularTotalCents = basePerPersonCents * input.participants;
 
-      if (groupPack && input.packageKey === groupPack.key) {
+      if (groupPack && input.packageKey === groupPack.key && packAvailable(groupPack, input.participants)) {
         const extras = Math.max(0, input.participants - groupPack.includedParticipants);
 
         lines.push({

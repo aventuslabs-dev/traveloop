@@ -6,6 +6,7 @@ import {
   getExperience,
   getEntitlement,
   listSlotsByDate,
+  packAvailable,
   quoteBooking,
   resolveBookingWindow,
   sessionInstant,
@@ -113,7 +114,20 @@ export function parseBookingForm(
     // A group pack is opt-in, so anything other than its own key — including
     // nothing at all — is the plain per-person rate rather than an error.
     const { groupPack } = experience.pricing;
-    packageKey = text(formData, "packageKey") === groupPack.key ? groupPack.key : null;
+    const wantsPack = text(formData, "packageKey") === groupPack.key;
+
+    // The form hides the pack below its minimum, but a POST straight at the
+    // action can still claim it — and claiming it for two people would buy a
+    // four-person price. Refuse rather than silently reprice, so the customer
+    // is never charged something other than what they agreed to.
+    if (wantsPack && !packAvailable(groupPack, participants)) {
+      return {
+        ok: false,
+        error: `The ${groupPack.label} needs at least ${groupPack.minParticipants} participants.`,
+      };
+    }
+
+    packageKey = wantsPack ? groupPack.key : null;
   }
 
   // --- Location -----------------------------------------------------------

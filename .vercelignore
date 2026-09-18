@@ -1,0 +1,7 @@
+# Build output and dependencies — Vercel builds these itself.
+node_modules
+.next
+
+# Camera master for the Penang clip: 288MB of HEVC that nothing references.
+# public/penang.mp4 is the transcode that actually ships.
+public/penang.mov

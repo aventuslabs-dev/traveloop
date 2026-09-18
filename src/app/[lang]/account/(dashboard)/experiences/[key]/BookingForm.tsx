@@ -9,6 +9,7 @@ import {
   formatPrice,
   formatTimeRange,
   getExperience,
+  packAvailable,
   parseDate,
   PER_PERSON_PRICE_KEY,
   quoteBooking,
@@ -170,13 +171,19 @@ export default function BookingForm({
           .totalCents
       );
 
+    const perPerson = {
+      key: PER_PERSON_PRICE_KEY,
+      label: "Per person",
+      note: `Your ${pass.passName} Pass rate for each of the ${participants}`,
+      price: totalFor(PER_PERSON_PRICE_KEY),
+    };
+
+    // Below its minimum the pack is not an option at all, so offering it as a
+    // greyed-out row would only invite the question of why.
+    if (!packAvailable(pack, participants)) return [perPerson];
+
     return [
-      {
-        key: PER_PERSON_PRICE_KEY,
-        label: "Per person",
-        note: `Your ${pass.passName} Pass rate for each of the ${participants}`,
-        price: totalFor(PER_PERSON_PRICE_KEY),
-      },
+      perPerson,
       { key: pack.key, label: pack.label, note: pack.note, price: totalFor(pack.key) },
     ];
   }, [experience, pass.discountPercent, pass.passName, participants]);

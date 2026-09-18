@@ -92,6 +92,21 @@ export function getSiteUrl(): string {
   );
 }
 
+/**
+ * Deep link into the Stripe Dashboard, e.g. `payments/pi_123`.
+ *
+ * Test-mode data lives under a separate `/test` path and is invisible from the
+ * live one, so the link has to follow whichever key this deployment is using —
+ * otherwise every link from a preview build lands on "no such payment".
+ *
+ * Server-only: it reads the secret key to decide, so never call it from a
+ * Client Component.
+ */
+export function stripeDashboardUrl(path: string): string {
+  const isTestKey = /^(sk|rk)_test_/.test(process.env.STRIPE_SECRET_KEY ?? "");
+  return `https://dashboard.stripe.com/${isTestKey ? "test/" : ""}${path}`;
+}
+
 /** True when the site URL is publicly reachable, so Stripe can fetch product images from it. */
 export function siteIsPubliclyReachable(): boolean {
   const url = getSiteUrl();

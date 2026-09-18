@@ -235,6 +235,54 @@ create policy "Customers can view their own pass registrations"
 create index if not exists pass_registrations_order_idx on pass_registrations (order_session_id);
 create index if not exists pass_registrations_user_idx on pass_registrations (user_id, created_at desc);
 
+-- Checkouts that never became orders: a declined card, an FPX payment that
+-- failed to settle, or a session the buyer walked away from
+-- (src/app/api/webhooks/stripe/route.ts). The orders table only ever holds
+-- successes, so without this the only record of a lost sale is the Stripe
+-- dashboard.
+--
+-- One row per Stripe *event*, not per buyer: someone who retries a declined
+-- card three times leaves three rows, which is what an operator wants to see.
+-- `event_id` is unique so Stripe's at-least-once delivery can't duplicate a row.
+--
+-- Nothing vacuums this table. Unlike checkout_drafts it holds no passport
+-- numbers or addresses — name, email and phone as Stripe captured them — but it
+-- is still personal data about people who never bought anything, so prune it on
+-- whatever retention period the business settles on.
+create table if not exists payment_attempts (
+  id bigint generated always as identity primary key,
+  event_id text not null unique,
+  -- 'failed'  — the payment was attempted and declined or did not settle.
+  -- 'expired' — the session timed out with no payment attempted (~24h).
+  status text not null check (status in ('failed', 'expired')),
+  session_id text,
+  payment_intent_id text,
+  -- The checkout_drafts row this attempt came from, if it still exists.
+  draft_id text,
+  amount_total integer,
+  currency text,
+  customer_email text,
+  customer_name text,
+  customer_phone text,
+  -- Human-readable cart ("2 × Gold Pass"), resolved from the Stripe line items.
+  pass_summary text,
+  quantity integer,
+  -- Stripe's decline_code where there is one ("insufficient_funds"), else code.
+  failure_code text,
+  failure_message text,
+  -- When Stripe raised the event, not when we wrote the row: a webhook retried
+  -- for an hour would otherwise date the failure to the retry.
+  occurred_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+-- Service-role only (no policies): the webhook writes it and the admin console
+-- reads it. A customer has no business reading anyone's failed payments,
+-- including their own, and RLS denies by default.
+alter table payment_attempts enable row level security;
+
+create index if not exists payment_attempts_occurred_at_idx on payment_attempts (occurred_at desc);
+
 -- Looks up the Auth account for an email address.
 --
 -- Fulfilment has to answer "does this buyer already have an account?" before it

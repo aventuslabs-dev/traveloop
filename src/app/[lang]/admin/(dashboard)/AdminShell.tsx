@@ -13,7 +13,7 @@ export type AdminShellProps = {
   /** Rendered as a form so sign-out stays a POST, not a link. */
   signOut: React.ReactNode;
   adminEmail: string;
-  counts: { orders: number; bookings: number; customers: number };
+  counts: { orders: number; bookings: number; customers: number; failedPayments: number };
 };
 
 /**
@@ -37,6 +37,14 @@ export default function AdminShell({ children, signOut, adminEmail, counts }: Ad
     { href: "/admin", label: "Orders", icon: "receipt", count: counts.orders },
     { href: "/admin/bookings", label: "Bookings", icon: "calendar", count: counts.bookings },
     { href: "/admin/users", label: "Customers", icon: "users", count: counts.customers },
+    // The count is deliberately the last 7 days, not all time — see
+    // countRecentFailedPayments. A lifetime total would sit here forever.
+    {
+      href: "/admin/payments",
+      label: "Failed payments",
+      icon: "alert",
+      count: counts.failedPayments,
+    },
   ];
 
   return (

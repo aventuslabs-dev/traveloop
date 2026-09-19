@@ -104,7 +104,8 @@ function accountWelcomeHtml(order: StoredOrder, items: PassOrderItem[], password
 }
 
 /**
- * Sends the buyer their receipt + invoice.
+ * Sends the buyer their receipt + invoice. Throws if the send fails, or if
+ * the invoice PDF can't be built — the caller decides what that means.
  *
  * Falls back to logging the full email to the console when RESEND_API_KEY
  * isn't set, so the checkout flow can be exercised end-to-end without an
@@ -144,9 +145,11 @@ export async function sendOrderConfirmationEmail(order: StoredOrder, items: Pass
   });
 
   if (error) {
-    // Fulfilment must not fail because the email provider hiccupped — the
-    // order is already recorded, and the invoice is viewable via its own route.
-    console.error(`[email] Failed to send confirmation for ${order.sessionId}:`, error);
+    // Raised, not swallowed. Fulfilment owns what happens next: it writes the
+    // reason onto the order so /admin can show who is still waiting and offer
+    // a resend. Logging and returning would leave an undelivered receipt with
+    // nothing anywhere to say so.
+    throw new Error(`Resend rejected the confirmation for ${order.sessionId}: ${error.message}`);
   }
 }
 
@@ -195,7 +198,8 @@ export async function sendAccountWelcomeEmail(
   });
 
   if (error) {
-    console.error(`[email] Failed to send welcome email for ${order.sessionId}:`, error);
+    // See sendOrderConfirmationEmail: the caller records the failure.
+    throw new Error(`Resend rejected the welcome email for ${order.sessionId}: ${error.message}`);
   }
 }
 

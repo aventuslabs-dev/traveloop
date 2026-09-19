@@ -17,6 +17,10 @@ export type StoredOrder = Omit<PassOrder, "items" | "draftId"> & {
   /** Trip dates from the registration form — null for orders placed before it existed. */
   arrivalDate: string | null;
   departureDate: string | null;
+  /** When the buyer's receipt actually went out. Null means they're still waiting for it. */
+  confirmationSentAt: string | null;
+  /** Why the last attempt to send that receipt failed, or null if none has. */
+  confirmationError: string | null;
 };
 
 type OrderRow = {
@@ -36,6 +40,8 @@ type OrderRow = {
   user_id: string | null;
   arrival_date: string | null;
   departure_date: string | null;
+  confirmation_sent_at: string | null;
+  confirmation_error: string | null;
 };
 
 function toStoredOrder(row: OrderRow): StoredOrder {
@@ -55,6 +61,11 @@ function toStoredOrder(row: OrderRow): StoredOrder {
     userId: row.user_id,
     arrivalDate: row.arrival_date,
     departureDate: row.departure_date,
+    // `?? null` rather than a bare read: if the app is deployed before the
+    // migration that adds these columns, the row simply won't have them, and
+    // an undefined here would read as "receipt already sent" downstream.
+    confirmationSentAt: row.confirmation_sent_at ?? null,
+    confirmationError: row.confirmation_error ?? null,
   };
 }
 
@@ -137,6 +148,50 @@ export async function insertOrderIfNew(
   }
 
   return { inserted: true, stored: toStoredOrder(updated) };
+}
+
+/**
+ * Records that the buyer's receipt reached them, so a redelivered Stripe
+ * event doesn't send it a second time.
+ *
+ * Never throws. By the time this runs the money is taken, the order is
+ * recorded and the email has gone out; turning a bookkeeping hiccup into a
+ * webhook error would undo none of that. The cost of losing this write is at
+ * worst a duplicate receipt on a redelivery, which beats a failed webhook.
+ */
+export async function markConfirmationSent(sessionId: string): Promise<void> {
+  const db = getSupabase();
+
+  const { error } = await db
+    .from("orders")
+    .update({ confirmation_sent_at: new Date().toISOString(), confirmation_error: null })
+    .eq("session_id", sessionId);
+
+  if (error) {
+    console.error(`[orders] Couldn't mark the receipt for ${sessionId} as sent:`, error.message);
+  }
+}
+
+/**
+ * Records why a receipt never reached the buyer. This is the only trace such
+ * a failure leaves — the admin orders list reads it to flag who is still
+ * waiting, and the order page shows the reason next to a resend button.
+ *
+ * Never throws, for the same reason as above.
+ */
+export async function recordConfirmationFailure(sessionId: string, reason: string): Promise<void> {
+  const db = getSupabase();
+
+  const { error } = await db
+    .from("orders")
+    // Long enough to keep a provider's own wording, short enough to stay
+    // readable in a table cell.
+    .update({ confirmation_error: reason.slice(0, 500) })
+    .eq("session_id", sessionId);
+
+  if (error) {
+    console.error(`[orders] Couldn't record the receipt failure for ${sessionId}:`, error.message);
+  }
 }
 
 /** Keeps the admin orders table from loading the entire table into one request as the business grows. */

@@ -118,6 +118,38 @@ export async function getPassRegistrationsByOrder(sessionId: string): Promise<St
   return (data ?? []).map(toStoredPassRegistration);
 }
 
+/**
+ * An order's items, rebuilt from the registrations it stored.
+ *
+ * The cart itself lives in a checkout draft that fulfilment deletes once it's
+ * done with it (and that the vacuum clears after a day either way), so this is
+ * the durable copy. Anything that needs to reconstruct a receipt after the
+ * fact — a redelivered Stripe event, an operator resending from /admin —
+ * reads the items back from here rather than from the draft.
+ */
+export async function getOrderItemsFromRegistrations(sessionId: string): Promise<DraftItem[]> {
+  const registrations = await getPassRegistrationsByOrder(sessionId);
+
+  return registrations.map((reg) => ({
+    passKey: reg.passKey,
+    passName: reg.passName,
+    unitAmountCents: reg.unitAmountCents,
+    registration: {
+      fullName: reg.fullName,
+      nationality: reg.nationality,
+      arrivalDate: reg.arrivalDate,
+      departureDate: reg.departureDate,
+      travelDocumentType: reg.travelDocumentType,
+      travelDocumentNumber: reg.travelDocumentNumber,
+      address: reg.address,
+      emergencyContactName: reg.emergencyContactName,
+      emergencyContactPhone: reg.emergencyContactPhone,
+      emergencyContactRelationship: reg.emergencyContactRelationship,
+      termsAcceptedAt: reg.termsAcceptedAt,
+    },
+  }));
+}
+
 /** All of a customer's registrations across every order, most recent first — powers /account. */
 export async function getPassRegistrationsByUserId(userId: string): Promise<StoredPassRegistration[]> {
   const db = getSupabase();

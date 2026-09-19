@@ -49,6 +49,17 @@ create policy "Customers can view their own orders"
 alter table orders add column if not exists arrival_date date;
 alter table orders add column if not exists departure_date date;
 
+-- Delivering the receipt is a separate step from recording the order, and it
+-- fails for its own reasons (Resend down, an invoice that won't render). It
+-- needs its own record for two reasons: Stripe can deliver the same event
+-- twice and must not send the email twice, and a send that never succeeded
+-- must stay visible instead of vanishing with the request that tried it.
+--
+-- Null sent_at means the buyer is still waiting; /admin lists those with the
+-- last error and a one-click resend (see orders/order-actions.ts).
+alter table orders add column if not exists confirmation_sent_at timestamptz;
+alter table orders add column if not exists confirmation_error text;
+
 -- The tourist-registration details collected before checkout
 -- (src/app/passes/register). One row per Supabase Auth account: a repeat
 -- purchase updates the existing row rather than adding another.

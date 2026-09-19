@@ -4,7 +4,18 @@ import { createClient } from "@/lib/supabase/server";
 import { getOrderBySessionId } from "@/lib/orders-db";
 import { getPassRegistrationsByOrder } from "@/lib/pass-registrations-db";
 import { isAdminUser } from "@/lib/admin-auth";
-import { EmptyState, PageHeader, Panel, Tier, formatDay, money } from "../../ui";
+import {
+  EmptyState,
+  Flash,
+  PageHeader,
+  Panel,
+  Pill,
+  Tier,
+  formatDay,
+  formatDayTime,
+  money,
+} from "../../ui";
+import { resendReceipt } from "../order-actions";
 
 export const metadata: Metadata = {
   title: "Admin · Order registrations",
@@ -13,9 +24,15 @@ export const metadata: Metadata = {
 
 type OrderDetailPageProps = {
   params: Promise<{ sessionId: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
-export default async function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
+const ERRORS: Record<string, string> = {
+  noemail: "This order has no email address on it, so there's nowhere to send the receipt.",
+  send: "That receipt still wouldn't send. The reason is below — try again once it's fixed.",
+};
+
+export default async function AdminOrderDetailPage({ params, searchParams }: OrderDetailPageProps) {
   const supabase = await createClient();
   if (!(await isAdminUser(supabase))) {
     redirect("/admin/login");
@@ -26,6 +43,10 @@ export default async function AdminOrderDetailPage({ params }: OrderDetailPagePr
   if (!order) {
     notFound();
   }
+
+  const query = await searchParams;
+  const sent = query.sent === "1";
+  const error = typeof query.error === "string" ? ERRORS[query.error] : null;
 
   const registrations = await getPassRegistrationsByOrder(sessionId);
 
@@ -48,7 +69,21 @@ export default async function AdminOrderDetailPage({ params }: OrderDetailPagePr
         }
       />
 
-      <Panel title="Order" icon="receipt">
+      {sent && <Flash tone="ok">Receipt sent to {order.customerEmail}.</Flash>}
+      {error && <Flash tone="err">{error}</Flash>}
+
+      <Panel
+        title="Order"
+        icon="receipt"
+        footer={
+          <form action={resendReceipt}>
+            <input type="hidden" name="sessionId" value={order.sessionId} />
+            <button className="ad-btn ad-btn-primary" type="submit" disabled={!order.customerEmail}>
+              {order.confirmationSentAt ? "Send receipt again" : "Send receipt now"}
+            </button>
+          </form>
+        }
+      >
         <dl className="ad-dl">
           <div>
             <dt>Invoice</dt>
@@ -95,6 +130,27 @@ export default async function AdminOrderDetailPage({ params }: OrderDetailPagePr
           <div>
             <dt>Payment intent</dt>
             <dd className="is-mono">{order.paymentIntentId ?? "—"}</dd>
+          </div>
+          {/* The receipt is the one part of fulfilment that can fail on its
+              own after the money is taken, so it reports its own state. */}
+          <div>
+            <dt>Receipt</dt>
+            <dd>
+              {order.confirmationSentAt ? (
+                <span className="ad-cell-stack">
+                  <Pill label="Sent" tone="success" />
+                  <span>{formatDayTime(order.confirmationSentAt)}</span>
+                </span>
+              ) : (
+                <span className="ad-cell-stack">
+                  <Pill
+                    label={order.confirmationError ? "Not delivered" : "Pending"}
+                    tone={order.confirmationError ? "danger" : "warn"}
+                  />
+                  <span>{order.confirmationError ?? "No receipt has gone out yet."}</span>
+                </span>
+              )}
+            </dd>
           </div>
         </dl>
       </Panel>

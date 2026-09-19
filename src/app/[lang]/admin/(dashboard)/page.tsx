@@ -19,6 +19,7 @@ const columns: Column[] = [
   { key: "qty", label: "Qty", align: "right" },
   { key: "total", label: "Total", align: "right" },
   { key: "phone", label: "Phone" },
+  { key: "receipt", label: "Receipt" },
   { key: "session", label: "Stripe session" },
   { key: "actions", label: "", sortable: false },
 ];
@@ -60,6 +61,13 @@ export default async function AdminOrdersPage() {
         strong: true,
       },
       phone: { kind: "text", value: order.customerPhone ?? "—" },
+      // A paid order whose receipt never left is invisible otherwise: the row
+      // looks complete, and only the buyer knows nothing arrived.
+      receipt: order.confirmationSentAt
+        ? { kind: "pill", label: "Sent", tone: "success" }
+        : order.confirmationError
+          ? { kind: "pill", label: "Not delivered", tone: "danger" }
+          : { kind: "pill", label: "Pending", tone: "warn" },
       session: { kind: "mono", value: order.sessionId, truncate: true },
       actions: {
         kind: "actions",

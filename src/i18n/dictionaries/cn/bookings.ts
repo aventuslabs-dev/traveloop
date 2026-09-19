@@ -1,9 +1,9 @@
 /**
- * 文化体验预订的错误提示。
+ * 文化体验预订被拒绝的原因。
  *
- * 注意：账户中心本身（`app/[lang]/account/**`）目前仍是硬编码英文，中文用户
- * 在那里看到的界面还是英文 —— 这里先把报错翻好，其余文案日后一并搬进本命名
- * 空间。
+ * 仅包含错误提示：它们对应 lib/booking.ts 中的 BookingError 联合类型，由
+ * `bookingErrorMessage` 解析 —— 这也是它们与客户中心其余文案（见 `account`）
+ * 分开存放的原因。
  */
 const bookings = {
   /** 对应 lib/booking.ts 的 BookingError；占位符由该类型携带的值填入。 */

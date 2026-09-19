@@ -1,82 +1,92 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCustomerProfile } from "@/lib/customer-profile-db";
 import { profileCompleteness } from "@/app/[lang]/account/profile-summary";
+import { MIN_PASSWORD_LENGTH } from "@/app/[lang]/account/password-rules";
 import { Icon } from "@/app/components/Icons";
+import { localePage, type LangParams } from "@/i18n/page";
+import { getDictionary } from "@/i18n/dictionaries";
+import { htmlLang, isLocale, type Locale } from "@/i18n/config";
+import { fill } from "@/i18n/interpolate";
+import { phrases } from "@/app/data/phrases";
 import ProfileSection from "./ProfileSection";
 import PasswordForm from "./PasswordForm";
 
-export const metadata: Metadata = {
-  title: "My details",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata({ params }: LangParams): Promise<Metadata> {
+  const { lang } = await params;
+  if (!isLocale(lang)) notFound();
+  const dict = await getDictionary(lang);
 
-type DetailsPageProps = {
+  return {
+    title: dict.account.details.title,
+    robots: { index: false, follow: false },
+  };
+}
+
+type DetailsPageProps = LangParams & {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString("en-MY", {
+function formatDate(value: string, lang: Locale): string {
+  return new Date(value).toLocaleDateString(lang === "en" ? "en-MY" : htmlLang[lang], {
     day: "numeric",
     month: "long",
     year: "numeric",
   });
 }
 
-export default async function AccountDetailsPage({ searchParams }: DetailsPageProps) {
+export default async function AccountDetailsPage({ params, searchParams }: DetailsPageProps) {
+  const { lang, dict } = await localePage(params);
+  const t = dict.account.details;
+
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/account/login");
+    redirect(`/${lang}/account/login`);
   }
 
-  const params = await searchParams;
-  const profileUpdated = params.profileUpdated === "1";
-  const profileError = params.profileError === "1";
-  const passwordUpdated = params.passwordUpdated === "1";
-  const passwordError = typeof params.passwordError === "string" ? params.passwordError : null;
+  const query = await searchParams;
+  const profileUpdated = query.profileUpdated === "1";
+  const profileError = query.profileError === "1";
+  const passwordUpdated = query.passwordUpdated === "1";
+  const passwordError = typeof query.passwordError === "string" ? query.passwordError : null;
 
   const profile = await getCustomerProfile(user.id);
-  const completeness = profileCompleteness(profile);
+  const completeness = profileCompleteness(profile, dict.account.profile.rows);
 
   return (
     <>
       <header className="account-greeting">
-        <p className="account-eyebrow">Your account</p>
-        <h1>My details</h1>
-        <p>
-          The information we hold for you, and the password you use to sign in to this portal.
-        </p>
+        <p className="account-eyebrow">{t.eyebrow}</p>
+        <h1>{t.title}</h1>
+        <p>{t.lede}</p>
       </header>
 
       {profileUpdated && (
         <p className="account-flash is-success">
           <Icon name="check" />
-          Your details were saved.
+          {t.savedFlash}
         </p>
       )}
       {profileError && (
         <p className="account-flash is-error">
           <Icon name="alert" />
-          We couldn&apos;t save your details. Please try again.
+          {t.saveFailedFlash}
         </p>
       )}
 
       <section className="account-section">
         <div className="account-section-head">
-          <h2>Registration details</h2>
+          <h2>{t.registrationHeading}</h2>
           <span className="account-count">
-            {completeness.filled} of {completeness.total} filled in
+            {fill(t.filledCount, { filled: completeness.filled, total: completeness.total })}
           </span>
         </div>
-        <p className="account-section-lede">
-          Collected when you bought your pass. Keep them accurate — your pass and travel insurance
-          cover rely on them.
-        </p>
+        <p className="account-section-lede">{t.registrationLede}</p>
 
         <div className="account-card">
           {!completeness.isEmpty && (
@@ -87,7 +97,7 @@ export default async function AccountDetailsPage({ searchParams }: DetailsPagePr
                 aria-valuenow={completeness.percent}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-label="Registration details completeness"
+                aria-label={t.meterAria}
               >
                 <span style={{ width: `${completeness.percent}%` }} />
               </div>
@@ -95,59 +105,58 @@ export default async function AccountDetailsPage({ searchParams }: DetailsPagePr
                 {completeness.isComplete ? (
                   <>
                     <Icon name="check" />
-                    Everything we need is on file.
+                    {t.complete}
                   </>
                 ) : (
                   <>
                     <Icon name="alert" />
-                    Still missing: {completeness.missing.join(", ")}.
+                    {fill(t.stillMissing, {
+                      fields: phrases(lang).joinList(completeness.missing),
+                    })}
                   </>
                 )}
               </p>
             </div>
           )}
 
-          <ProfileSection profile={profile} />
+          <ProfileSection profile={profile} t={dict.account.profile} lang={lang} />
         </div>
 
         {profile?.termsAcceptedAt && (
           <p className="account-footnote">
-            You accepted the Traveloop terms and insurance conditions on{" "}
-            {formatDate(profile.termsAcceptedAt)}.
+            {fill(t.termsAccepted, { date: formatDate(profile.termsAcceptedAt, lang) })}
           </p>
         )}
       </section>
 
       <section className="account-section">
         <div className="account-section-head">
-          <h2>Sign-in &amp; security</h2>
+          <h2>{t.securityHeading}</h2>
         </div>
-        <p className="account-section-lede">
-          Your email is the username for this portal. Get in touch if you need it changed.
-        </p>
+        <p className="account-section-lede">{t.securityLede}</p>
 
         {passwordUpdated && (
           <p className="account-flash is-success">
             <Icon name="check" />
-            Your password was updated.
+            {t.passwordUpdatedFlash}
           </p>
         )}
         {passwordError === "short" && (
           <p className="account-flash is-error">
             <Icon name="alert" />
-            Password must be at least 8 characters.
+            {fill(t.passwordTooShortFlash, { n: MIN_PASSWORD_LENGTH })}
           </p>
         )}
         {passwordError === "mismatch" && (
           <p className="account-flash is-error">
             <Icon name="alert" />
-            Those passwords don&apos;t match.
+            {t.passwordMismatchFlash}
           </p>
         )}
         {passwordError === "1" && (
           <p className="account-flash is-error">
             <Icon name="alert" />
-            We couldn&apos;t update your password. Please try again.
+            {t.passwordFailedFlash}
           </p>
         )}
 
@@ -157,13 +166,13 @@ export default async function AccountDetailsPage({ searchParams }: DetailsPagePr
               <Icon name="mail" />
             </span>
             <div className="account-security-main">
-              <p className="account-security-label">Email address</p>
+              <p className="account-security-label">{t.emailLabel}</p>
               <p className="account-security-value">{user.email}</p>
             </div>
           </div>
 
-          <p className="account-form-label with-rule">Change password</p>
-          <PasswordForm />
+          <p className="account-form-label with-rule">{t.changePassword}</p>
+          <PasswordForm t={dict.account.password} />
         </div>
       </section>
     </>

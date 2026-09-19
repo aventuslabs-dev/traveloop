@@ -1,5 +1,6 @@
 import type { Dictionary } from "../en";
 import about from "./about";
+import account from "./account";
 import blogs from "./blogs";
 import bookings from "./bookings";
 import checkout from "./checkout";
@@ -16,6 +17,7 @@ import terms from "./terms";
 /** 中文词典。类型来自英文版，缺键即构建失败。 */
 const cn: Dictionary = {
   about,
+  account,
   blogs,
   bookings,
   checkout,

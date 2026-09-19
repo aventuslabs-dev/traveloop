@@ -277,6 +277,22 @@ export function getPassTier(key: unknown): PassTier | undefined {
   return isPassKey(key) ? passTiers.find((tier) => tier.key === key) : undefined;
 }
 
+/**
+ * What to call a tier in the reader's language — "Gold" or "金卡".
+ *
+ * Orders and bookings store `passName` as it read in English when the purchase
+ * was made, because that is what our records, the invoice and the insurer's
+ * file say. Anything a customer *reads* goes through here instead, keyed off
+ * `passKey`, so a Chinese buyer isn't shown an English tier name on a page
+ * that is otherwise entirely in Chinese.
+ *
+ * Falls back to the stored name for a key that has since left the catalogue.
+ */
+export function localizedPassName(key: unknown, lang: Locale, fallback: string): string {
+  if (!isPassKey(key)) return fallback;
+  return getPassTiers(lang).find((tier) => tier.key === key)?.name ?? fallback;
+}
+
 /** A priced cell: the regular rate struck through, what this tier pays, and the saving. */
 export type PassComparisonPrice = {
   regular: string;

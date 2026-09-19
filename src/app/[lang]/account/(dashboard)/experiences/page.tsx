@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import Link from "@/i18n/Link";
 import { createClient } from "@/lib/supabase/server";
 import { getOrdersByUserId, type StoredOrder } from "@/lib/orders-db";
 import { bestOrderFor } from "@/lib/booking";
@@ -9,56 +9,71 @@ import { Icon } from "@/app/components/Icons";
 import {
   BOOKING_LEAD_DAYS,
   describeSchedule,
-  experiences,
   formatDateShort,
+  getExperiences,
   nextAvailableDate,
   resolveBookingWindow,
   scheduleWeekdays,
   type Experience,
 } from "@/app/data/experiences";
-import { passTiers } from "@/app/data/passes";
+import { getPassTiers, localizedPassName } from "@/app/data/passes";
+import { localePage, type LangParams } from "@/i18n/page";
+import { getDictionary } from "@/i18n/dictionaries";
+import { isLocale, type Locale } from "@/i18n/config";
+import { fill } from "@/i18n/interpolate";
+import { phrases } from "@/app/data/phrases";
 
-export const metadata: Metadata = {
-  title: "Cultural experiences",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata({ params }: LangParams): Promise<Metadata> {
+  const { lang } = await params;
+  if (!isLocale(lang)) notFound();
+  const dict = await getDictionary(lang);
 
-/** "Silver, Gold & Platinum" — the tiers an experience is included with. */
-function includedWith(experience: Experience): string {
-  const names = passTiers
+  return {
+    title: dict.account.experiences.title,
+    robots: { index: false, follow: false },
+  };
+}
+
+/** "Silver, Gold & Platinum" / "银卡、金卡和白金卡" — the tiers an experience is included with. */
+function includedWith(experience: Experience, lang: Locale): string {
+  const names = getPassTiers(lang)
     .filter((tier) => experience.discountByTier[tier.key] !== undefined)
     .map((tier) => tier.name);
 
-  return names.length > 1 ? `${names.slice(0, -1).join(", ")} & ${names.at(-1)}` : names[0];
+  return phrases(lang).joinList(names);
 }
 
-export default async function ExperiencesPage() {
+export default async function ExperiencesPage({ params }: LangParams) {
+  const { lang, dict } = await localePage(params);
+  const t = dict.account.experiences;
+
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/account/login");
+    redirect(`/${lang}/account/login`);
   }
 
   const orders = await getOrdersByUserId(user.id);
+  const experiences = getExperiences(lang);
 
   if (orders.length === 0) {
     return (
       <>
         <header className="account-greeting">
-          <p className="account-eyebrow">Included with your pass</p>
-          <h1>Cultural experiences</h1>
-          <p>Hands-on sessions across Penang, included with your Traveloop pass.</p>
+          <p className="account-eyebrow">{t.eyebrow}</p>
+          <h1>{t.title}</h1>
+          <p>{t.ledeNoPass}</p>
         </header>
         <div className="account-empty">
           <span className="account-empty-icon" aria-hidden="true">
             <Icon name="compass" />
           </span>
-          <p>You&apos;ll be able to book experiences once you have a pass.</p>
+          <p>{t.emptyTitle}</p>
           <Link className="button primary" href="/passes">
-            Browse passes
+            {t.browsePasses}
           </Link>
         </div>
       </>
@@ -75,7 +90,7 @@ export default async function ExperiencesPage() {
     return {
       experience,
       unlocked: order !== null,
-      passName: order?.passName ?? null,
+      passName: order ? localizedPassName(order.passKey, lang, order.passName) : null,
       // Narrowed to the trip on the pass they'd actually book with, so the
       // date shown is one they can really pick.
       nextDate: nextAvailableDate(experience, order ? resolveBookingWindow(order) : openWindow),
@@ -87,12 +102,14 @@ export default async function ExperiencesPage() {
   return (
     <>
       <header className="account-greeting">
-        <p className="account-eyebrow">Included with your pass</p>
-        <h1>Cultural experiences</h1>
+        <p className="account-eyebrow">{t.eyebrow}</p>
+        <h1>{t.title}</h1>
         <p>
-          {unlockedCount} of {cards.length} experiences are included with your pass. Book at least{" "}
-          {BOOKING_LEAD_DAYS} days ahead — your pass discount is applied at booking, and you pay at
-          the venue on the day.
+          {fill(t.lede, {
+            unlocked: unlockedCount,
+            total: cards.length,
+            days: BOOKING_LEAD_DAYS,
+          })}
         </p>
       </header>
 
@@ -103,7 +120,9 @@ export default async function ExperiencesPage() {
               <Image src={experience.image} alt="" fill sizes="(max-width: 720px) 100vw, 360px" />
               <span className={`xp-card-badge${unlocked ? "" : " is-locked"}`}>
                 <Icon name={unlocked ? "ticket" : "shield"} />
-                {unlocked ? `Included with ${passName}` : `${includedWith(experience)} only`}
+                {unlocked
+                  ? fill(t.card.included, { pass: passName! })
+                  : fill(t.card.tiersOnly, { tiers: includedWith(experience, lang) })}
               </span>
             </div>
 
@@ -114,9 +133,9 @@ export default async function ExperiencesPage() {
               <ul className="xp-card-facts">
                 <li>
                   <Icon name="clock" />
-                  <span title={describeSchedule(experience)}>
+                  <span title={describeSchedule(experience, lang)}>
                     <span className="xp-day-pills">
-                      {scheduleWeekdays(experience).map((day) => (
+                      {scheduleWeekdays(experience, lang).map((day) => (
                         <span key={day}>{day}</span>
                       ))}
                     </span>
@@ -132,10 +151,11 @@ export default async function ExperiencesPage() {
                   <span>
                     {nextDate ? (
                       <>
-                        Next session <strong>{formatDateShort(nextDate)}</strong>
+                        {t.card.nextSessionBefore}
+                        <strong>{formatDateShort(nextDate, lang)}</strong>
                       </>
                     ) : (
-                      "No sessions in your travel window"
+                      t.card.noSessions
                     )}
                   </span>
                 </li>
@@ -146,14 +166,14 @@ export default async function ExperiencesPage() {
                   className="button primary xp-card-cta"
                   href={`/account/experiences/${experience.key}`}
                 >
-                  Check dates &amp; price
+                  {t.card.cta}
                   <Icon name="arrowRight" />
                 </Link>
               ) : (
                 <div className="xp-card-locked">
-                  <p>Not included with your pass — upgrade to unlock it.</p>
+                  <p>{t.card.lockedNote}</p>
                   <Link className="button ghost dark" href="/passes#pricing">
-                    Compare passes
+                    {t.card.comparePasses}
                   </Link>
                 </div>
               )}

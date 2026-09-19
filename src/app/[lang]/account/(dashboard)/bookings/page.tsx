@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import Link from "@/i18n/Link";
 import { createClient } from "@/lib/supabase/server";
 import { getBookingsByUserId, type StoredBooking } from "@/lib/experience-bookings-db";
 import { isCancellableByCustomer, isPastSession } from "@/lib/booking";
@@ -11,25 +11,53 @@ import {
   formatDateLong,
   formatPrice,
   formatTimeRange,
+  getLocalizedExperience,
 } from "@/app/data/experiences";
+import { localizedPassName } from "@/app/data/passes";
+import { localePage, type LangParams } from "@/i18n/page";
+import { getDictionary, type Dictionary } from "@/i18n/dictionaries";
+import { isLocale, type Locale } from "@/i18n/config";
+import { count, fill } from "@/i18n/interpolate";
 
-export const metadata: Metadata = {
-  title: "My bookings",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata({ params }: LangParams): Promise<Metadata> {
+  const { lang } = await params;
+  if (!isLocale(lang)) notFound();
+  const dict = await getDictionary(lang);
 
-type BookingsPageProps = {
+  return {
+    title: dict.account.bookings.title,
+    robots: { index: false, follow: false },
+  };
+}
+
+type BookingsPageProps = LangParams & {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
-const STATUS_COPY: Record<StoredBooking["status"], string> = {
-  pending: "Awaiting confirmation",
-  confirmed: "Confirmed",
-  cancelled: "Cancelled",
-  completed: "Completed",
-};
+type BookingsCopy = Dictionary["account"]["bookings"];
 
-function BookingCard({ booking }: { booking: StoredBooking }) {
+/**
+ * The experience's name in the reader's language.
+ *
+ * `experienceName` on the row is a snapshot of what it was called in English
+ * when the booking was made — kept because it is what our records and the
+ * venue's say. What the customer is shown is looked up live from the
+ * catalogue, falling back to the stored name if the experience has since been
+ * retired from it.
+ */
+function experienceName(booking: StoredBooking, lang: Locale): string {
+  return getLocalizedExperience(booking.experienceKey, lang)?.name ?? booking.experienceName;
+}
+
+function BookingCard({
+  booking,
+  t,
+  lang,
+}: {
+  booking: StoredBooking;
+  t: BookingsCopy;
+  lang: Locale;
+}) {
   const cancellable = isCancellableByCustomer(booking);
   const showCalendar = booking.status === "confirmed" && !isPastSession(booking);
 
@@ -37,40 +65,42 @@ function BookingCard({ booking }: { booking: StoredBooking }) {
     <article className={`xp-booking status-${booking.status}`}>
       <div className="xp-booking-head">
         <span className={`xp-booking-status status-${booking.status}`}>
-          {STATUS_COPY[booking.status]}
+          {t.status[booking.status]}
         </span>
         <span className="xp-booking-ref">{booking.reference}</span>
       </div>
 
-      <h3>{booking.experienceName}</h3>
+      <h3>{experienceName(booking, lang)}</h3>
 
       <dl className="xp-booking-facts">
         <div>
-          <dt>Date</dt>
-          <dd>{formatDateLong(booking.sessionDate)}</dd>
+          <dt>{t.card.date}</dt>
+          <dd>{formatDateLong(booking.sessionDate, lang)}</dd>
         </div>
         <div>
-          <dt>Time</dt>
-          <dd>{formatTimeRange(booking.startMinutes, booking.endMinutes)}</dd>
+          <dt>{t.card.time}</dt>
+          <dd>{formatTimeRange(booking.startMinutes, booking.endMinutes, lang)}</dd>
         </div>
         <div>
-          <dt>Venue</dt>
-          <dd>{booking.location ?? "Confirmed by our team"}</dd>
+          <dt>{t.card.venue}</dt>
+          <dd>{booking.location ?? t.card.venueTbc}</dd>
         </div>
         <div>
-          <dt>Participants</dt>
+          <dt>{t.card.participants}</dt>
           <dd>
             {booking.participants}
-            {booking.childrenCount > 0 && ` + ${booking.childrenCount} child (free)`}
+            {booking.childrenCount > 0 && count(t.card.plusChildren, booking.childrenCount)}
           </dd>
         </div>
         <div>
-          <dt>{booking.status === "cancelled" ? "Was quoted" : "Pay at the venue"}</dt>
+          <dt>{booking.status === "cancelled" ? t.card.wasQuoted : t.card.payAtVenue}</dt>
           <dd>{formatPrice(booking.quotedAmountCents)}</dd>
         </div>
         <div>
-          <dt>Booked with</dt>
-          <dd className="xp-booking-pass">{booking.passKey} Pass</dd>
+          <dt>{t.card.bookedWith}</dt>
+          <dd className="xp-booking-pass">
+            {fill(t.card.pass, { pass: localizedPassName(booking.passKey, lang, booking.passKey) })}
+          </dd>
         </div>
       </dl>
 
@@ -85,14 +115,14 @@ function BookingCard({ booking }: { booking: StoredBooking }) {
               download
             >
               <Icon name="clock" />
-              Add to calendar
+              {t.card.addToCalendar}
             </a>
           )}
           {cancellable && (
             <form action={cancelBooking}>
               <input type="hidden" name="reference" value={booking.reference} />
               <button className="xp-booking-cancel" type="submit">
-                Cancel booking
+                {t.card.cancel}
               </button>
             </form>
           )}
@@ -102,20 +132,23 @@ function BookingCard({ booking }: { booking: StoredBooking }) {
   );
 }
 
-export default async function BookingsPage({ searchParams }: BookingsPageProps) {
+export default async function BookingsPage({ params, searchParams }: BookingsPageProps) {
+  const { lang, dict } = await localePage(params);
+  const t = dict.account.bookings;
+
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/account/login");
+    redirect(`/${lang}/account/login`);
   }
 
-  const params = await searchParams;
-  const justBooked = typeof params.booked === "string" ? params.booked : null;
-  const justCancelled = typeof params.cancelled === "string" ? params.cancelled : null;
-  const cancelError = typeof params.cancelError === "string" ? params.cancelError : null;
+  const query = await searchParams;
+  const justBooked = typeof query.booked === "string" ? query.booked : null;
+  const justCancelled = typeof query.cancelled === "string" ? query.cancelled : null;
+  const cancelError = typeof query.cancelError === "string" ? query.cancelError : null;
 
   const bookings = await getBookingsByUserId(user.id);
 
@@ -129,41 +162,39 @@ export default async function BookingsPage({ searchParams }: BookingsPageProps) 
   return (
     <>
       <header className="account-greeting">
-        <p className="account-eyebrow">Cultural experiences</p>
-        <h1>My bookings</h1>
-        <p>Your booked sessions. Payment is made at the venue on the day.</p>
+        <p className="account-eyebrow">{t.eyebrow}</p>
+        <h1>{t.title}</h1>
+        <p>{t.lede}</p>
       </header>
 
       {justBooked && (
         <p className="account-flash is-success">
           <Icon name="check" />
-          Booking {justBooked} received — we&apos;ve emailed you the details and will confirm the
-          session shortly.
+          {fill(t.flashBooked, { reference: justBooked })}
         </p>
       )}
       {justCancelled && (
         <p className="account-flash is-success">
           <Icon name="check" />
-          Booking {justCancelled} was cancelled.
+          {fill(t.flashCancelled, { reference: justCancelled })}
         </p>
       )}
       {cancelError === "late" && (
         <p className="account-flash is-error">
           <Icon name="alert" />
-          That session is less than {CANCELLATION_CUTOFF_HOURS} hours away, so it can&apos;t be
-          cancelled online. Please contact us and we&apos;ll sort it out.
+          {fill(t.flashTooLate, { hours: CANCELLATION_CUTOFF_HOURS })}
         </p>
       )}
       {cancelError === "1" && (
         <p className="account-flash is-error">
           <Icon name="alert" />
-          We couldn&apos;t cancel that booking. Please try again.
+          {t.flashCancelFailed}
         </p>
       )}
 
       <section className="account-section">
         <div className="account-section-head">
-          <h2>Upcoming</h2>
+          <h2>{t.upcoming}</h2>
           {upcoming.length > 0 && <span className="account-count">{upcoming.length}</span>}
         </div>
 
@@ -172,15 +203,15 @@ export default async function BookingsPage({ searchParams }: BookingsPageProps) 
             <span className="account-empty-icon" aria-hidden="true">
               <Icon name="calendar" />
             </span>
-            <p>No sessions booked yet.</p>
+            <p>{t.emptyTitle}</p>
             <Link className="button primary" href="/account/experiences">
-              Browse experiences
+              {t.browseExperiences}
             </Link>
           </div>
         ) : (
           <div className="xp-booking-list">
             {upcoming.map((booking) => (
-              <BookingCard key={booking.reference} booking={booking} />
+              <BookingCard key={booking.reference} booking={booking} t={t} lang={lang} />
             ))}
           </div>
         )}
@@ -189,11 +220,11 @@ export default async function BookingsPage({ searchParams }: BookingsPageProps) 
       {past.length > 0 && (
         <section className="account-section">
           <div className="account-section-head">
-            <h2>Past &amp; cancelled</h2>
+            <h2>{t.pastAndCancelled}</h2>
           </div>
           <div className="xp-booking-list">
             {past.map((booking) => (
-              <BookingCard key={booking.reference} booking={booking} />
+              <BookingCard key={booking.reference} booking={booking} t={t} lang={lang} />
             ))}
           </div>
         </section>

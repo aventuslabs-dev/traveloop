@@ -1,4 +1,5 @@
 import about from "./about";
+import account from "./account";
 import blogs from "./blogs";
 import bookings from "./bookings";
 import checkout from "./checkout";
@@ -18,6 +19,7 @@ import terms from "./terms";
  */
 const en = {
   about,
+  account,
   blogs,
   bookings,
   checkout,

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import Link from "@/i18n/Link";
 import { createClient } from "@/lib/supabase/server";
 import { getOrdersByUserId } from "@/lib/orders-db";
 import { bestOrderFor } from "@/lib/booking";
@@ -11,29 +11,45 @@ import {
   describeSchedule,
   formatDateLong,
   getEntitlement,
-  getExperience,
+  getLocalizedExperience,
   listSlotsByDate,
   resolveBookingWindow,
   slotValue,
 } from "@/app/data/experiences";
-import { passTiers } from "@/app/data/passes";
+import { getPassTiers, localizedPassName } from "@/app/data/passes";
+import { phrases } from "@/app/data/phrases";
+import { localePage } from "@/i18n/page";
+import { getDictionary } from "@/i18n/dictionaries";
+import { isLocale } from "@/i18n/config";
+import { fill } from "@/i18n/interpolate";
 import BookingForm, { type PassOption } from "./BookingForm";
 
 type BookExperiencePageProps = {
-  params: Promise<{ key: string }>;
+  params: Promise<{ lang: string; key: string }>;
 };
 
 export async function generateMetadata({ params }: BookExperiencePageProps): Promise<Metadata> {
-  const experience = getExperience((await params).key);
+  const { lang, key } = await params;
+  if (!isLocale(lang)) notFound();
+
+  const dict = await getDictionary(lang);
+  const experience = getLocalizedExperience(key, lang);
+  const t = dict.account.book;
 
   return {
-    title: experience ? `Book the ${experience.name} — Traveloop` : "Book an experience — Traveloop",
+    title: experience
+      ? `${fill(t.title, { experience: experience.name })} — Traveloop`
+      : `${t.titleFallback} — Traveloop`,
     robots: { index: false, follow: false },
   };
 }
 
 export default async function BookExperiencePage({ params }: BookExperiencePageProps) {
-  const experience = getExperience((await params).key);
+  const { lang, dict } = await localePage(params);
+  const t = dict.account.book;
+
+  const { key } = await params;
+  const experience = getLocalizedExperience(key, lang);
   if (!experience) notFound();
 
   const supabase = await createClient();
@@ -42,7 +58,7 @@ export default async function BookExperiencePage({ params }: BookExperiencePageP
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/account/login");
+    redirect(`/${lang}/account/login`);
   }
 
   const orders = await getOrdersByUserId(user.id);
@@ -56,12 +72,12 @@ export default async function BookExperiencePage({ params }: BookExperiencePageP
     return (
       <section className="account-section">
         <Link className="xp-back" href="/account/experiences">
-          <Icon name="arrowRight" /> All experiences
+          <Icon name="arrowRight" /> {t.back}
         </Link>
         <div className="account-empty">
-          <p>You already have an upcoming booking for the {experience.name}.</p>
+          <p>{fill(t.alreadyBooked, { experience: experience.name })}</p>
           <Link className="button primary" href="/account/bookings">
-            View your bookings
+            {t.viewBookings}
           </Link>
         </div>
       </section>
@@ -90,11 +106,15 @@ export default async function BookExperiencePage({ params }: BookExperiencePageP
       return {
         sessionId: order.sessionId,
         passKey: order.passKey,
-        passName: order.passName,
+        passName: localizedPassName(order.passKey, lang, order.passName),
         discountPercent: getEntitlement(order.passKey, experience).discountPercent,
+        /** Pre-formatted here: `phrases` shapes it, and the form only prints it. */
+        discountLabel: phrases(lang).discount(
+          getEntitlement(order.passKey, experience).discountPercent
+        ),
         tripLabel:
           order.arrivalDate && order.departureDate
-            ? `${formatDateLong(order.arrivalDate)} – ${formatDateLong(order.departureDate)}`
+            ? `${formatDateLong(order.arrivalDate, lang)} – ${formatDateLong(order.departureDate, lang)}`
             : null,
         window,
         slotsByDate: Object.fromEntries(
@@ -107,23 +127,26 @@ export default async function BookExperiencePage({ params }: BookExperiencePageP
     });
 
   if (passOptions.length === 0) {
-    const unlockedBy = passTiers
-      .filter((tier) => experience.discountByTier[tier.key] !== undefined)
-      .map((tier) => tier.name)
-      .join(" or ");
+    const unlockedBy = phrases(lang).joinList(
+      getPassTiers(lang)
+        .filter((tier) => experience.discountByTier[tier.key] !== undefined)
+        .map((tier) => tier.name)
+    );
 
     return (
       <section className="account-section">
         <Link className="xp-back" href="/account/experiences">
-          <Icon name="arrowRight" /> All experiences
+          <Icon name="arrowRight" /> {t.back}
         </Link>
         <div className="account-empty">
           <p>
-            The {experience.name} is included with the {unlockedBy} pass
-            {orders.length > 0 ? ", which isn't the pass you hold" : ""}.
+            {fill(orders.length > 0 ? t.notIncludedWithYours : t.notIncluded, {
+              experience: experience.name,
+              tiers: unlockedBy,
+            })}
           </p>
           <Link className="button primary" href="/passes#pricing">
-            Compare passes
+            {t.comparePasses}
           </Link>
         </div>
       </section>
@@ -137,7 +160,7 @@ export default async function BookExperiencePage({ params }: BookExperiencePageP
   return (
     <>
       <Link className="xp-back" href="/account/experiences">
-        <Icon name="arrowRight" /> All experiences
+        <Icon name="arrowRight" /> {t.back}
       </Link>
 
       <div className="xp-book-layout">
@@ -151,15 +174,15 @@ export default async function BookExperiencePage({ params }: BookExperiencePageP
 
           <dl className="xp-book-meta">
             <div>
-              <dt>Runs</dt>
-              <dd>{describeSchedule(experience)}</dd>
+              <dt>{t.runs}</dt>
+              <dd>{describeSchedule(experience, lang)}</dd>
             </div>
             <div>
-              <dt>Duration</dt>
+              <dt>{t.duration}</dt>
               <dd>{experience.durationLabel}</dd>
             </div>
             <div>
-              <dt>Venue</dt>
+              <dt>{t.venue}</dt>
               <dd>
                 {experience.venue ?? experience.venueNote}
                 {/* Lion Dance has both: a city-level venue plus a note that the
@@ -171,7 +194,7 @@ export default async function BookExperiencePage({ params }: BookExperiencePageP
             </div>
           </dl>
 
-          <p className="xp-book-section-label">What&apos;s included</p>
+          <p className="xp-book-section-label">{t.whatsIncluded}</p>
           <ul className="xp-book-list">
             {experience.includes.map((item) => (
               <li key={item}>
@@ -181,7 +204,7 @@ export default async function BookExperiencePage({ params }: BookExperiencePageP
             ))}
           </ul>
 
-          <p className="xp-book-section-label">Know before you go</p>
+          <p className="xp-book-section-label">{t.knowBefore}</p>
           <ul className="xp-book-list muted">
             {experience.knowBeforeYouGo.map((item) => (
               <li key={item}>
@@ -196,6 +219,8 @@ export default async function BookExperiencePage({ params }: BookExperiencePageP
           experienceKey={experience.key}
           passOptions={passOptions}
           defaultPassSessionId={defaultPass.sessionId}
+          t={dict.account.bookingForm}
+          lang={lang}
         />
       </div>
     </>

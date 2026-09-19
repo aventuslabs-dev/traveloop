@@ -7,6 +7,14 @@ import {
   EMERGENCY_RELATIONSHIPS,
 } from "@/lib/registration";
 import type { CustomerProfile } from "@/lib/customer-profile-db";
+import type { Dictionary } from "@/i18n/dictionaries";
+import type { Locale } from "@/i18n/config";
+import {
+  documentTypeLabelsCn,
+  nationalityLabelsCn,
+  optionLabel,
+  relationshipLabelsCn,
+} from "@/app/data/cn/registration";
 import { updateProfile } from "../../actions";
 
 /**
@@ -20,11 +28,19 @@ function splitOther(value: string | null, options: readonly string[]) {
 
 type ProfileFormProps = {
   profile: CustomerProfile | null;
+  t: Dictionary["account"]["profile"]["form"];
+  lang: Locale;
   /** Returns to the read-only summary without saving. */
   onCancel?: () => void;
 };
 
-export default function ProfileForm({ profile, onCancel }: ProfileFormProps) {
+/**
+ * Every `<option>` below submits the English value from `lib/registration.ts`
+ * and only *displays* the translation: the server validates against that
+ * allow-list, and the insurer's records must not depend on which language the
+ * customer happened to be reading.
+ */
+export default function ProfileForm({ profile, t, lang, onCancel }: ProfileFormProps) {
   const initialNationality = splitOther(profile?.nationality ?? null, NATIONALITIES);
   const initialRelationship = splitOther(
     profile?.emergencyContactRelationship ?? null,
@@ -36,31 +52,31 @@ export default function ProfileForm({ profile, onCancel }: ProfileFormProps) {
 
   return (
     <form className="account-profile-form" action={updateProfile}>
-      <p className="account-form-label">About you</p>
+      <p className="account-form-label">{t.aboutYou}</p>
 
       <label className="admin-field">
-        <span>Full name</span>
+        <span>{t.fullName}</span>
         <input
           name="fullName"
           type="text"
           autoComplete="name"
-          placeholder="As printed on your travel document"
+          placeholder={t.fullNamePlaceholder}
           defaultValue={profile?.fullName ?? ""}
         />
       </label>
 
       <div className="register-row">
         <label className="admin-field">
-          <span>Nationality</span>
+          <span>{t.nationality}</span>
           <select
             name="nationality"
             value={nationality}
             onChange={(e) => setNationality(e.target.value)}
           >
-            <option value="">Not set</option>
+            <option value="">{t.notSet}</option>
             {NATIONALITIES.map((n) => (
               <option key={n} value={n}>
-                {n}
+                {optionLabel(n, nationalityLabelsCn, lang)}
               </option>
             ))}
           </select>
@@ -68,7 +84,7 @@ export default function ProfileForm({ profile, onCancel }: ProfileFormProps) {
 
         {nationality === "Other" ? (
           <label className="admin-field">
-            <span>Please specify your nationality</span>
+            <span>{t.otherNationality}</span>
             <input name="otherNationality" type="text" defaultValue={initialNationality.other} />
           </label>
         ) : (
@@ -78,19 +94,19 @@ export default function ProfileForm({ profile, onCancel }: ProfileFormProps) {
 
       <div className="register-row">
         <label className="admin-field">
-          <span>Type of travel document</span>
+          <span>{t.documentType}</span>
           <select name="travelDocumentType" defaultValue={profile?.travelDocumentType ?? ""}>
-            <option value="">Not set</option>
+            <option value="">{t.notSet}</option>
             {DOCUMENT_TYPES.map((d) => (
               <option key={d} value={d}>
-                {d}
+                {optionLabel(d, documentTypeLabelsCn, lang)}
               </option>
             ))}
           </select>
         </label>
 
         <label className="admin-field">
-          <span>Document number</span>
+          <span>{t.documentNumber}</span>
           <input
             name="travelDocumentNumber"
             type="text"
@@ -101,23 +117,21 @@ export default function ProfileForm({ profile, onCancel }: ProfileFormProps) {
       </div>
 
       <label className="admin-field">
-        <span>Home address</span>
+        <span>{t.address}</span>
         <textarea
           name="address"
           rows={3}
-          placeholder="Street, city, postcode, country"
+          placeholder={t.addressPlaceholder}
           defaultValue={profile?.address ?? ""}
         />
       </label>
 
-      <p className="account-form-label">Emergency contact</p>
-      <p className="account-form-hint">
-        Who we&apos;d call on your behalf if something happened during your trip.
-      </p>
+      <p className="account-form-label">{t.emergencyHeading}</p>
+      <p className="account-form-hint">{t.emergencyHint}</p>
 
       <div className="register-row">
         <label className="admin-field">
-          <span>Contact name</span>
+          <span>{t.contactName}</span>
           <input
             name="emergencyContactName"
             type="text"
@@ -126,11 +140,11 @@ export default function ProfileForm({ profile, onCancel }: ProfileFormProps) {
         </label>
 
         <label className="admin-field">
-          <span>Contact phone number</span>
+          <span>{t.contactPhone}</span>
           <input
             name="emergencyContactPhone"
             type="tel"
-            placeholder="Include the country code"
+            placeholder={t.contactPhonePlaceholder}
             defaultValue={profile?.emergencyContactPhone ?? ""}
           />
         </label>
@@ -138,16 +152,16 @@ export default function ProfileForm({ profile, onCancel }: ProfileFormProps) {
 
       <div className="register-row">
         <label className="admin-field">
-          <span>Relationship to you</span>
+          <span>{t.relationship}</span>
           <select
             name="emergencyContactRelationship"
             value={relationship}
             onChange={(e) => setRelationship(e.target.value)}
           >
-            <option value="">Not set</option>
+            <option value="">{t.notSet}</option>
             {EMERGENCY_RELATIONSHIPS.map((r) => (
               <option key={r} value={r}>
-                {r}
+                {optionLabel(r, relationshipLabelsCn, lang)}
               </option>
             ))}
           </select>
@@ -155,7 +169,7 @@ export default function ProfileForm({ profile, onCancel }: ProfileFormProps) {
 
         {relationship === "Other" ? (
           <label className="admin-field">
-            <span>Please specify the relationship</span>
+            <span>{t.otherRelationship}</span>
             <input name="otherRelationship" type="text" defaultValue={initialRelationship.other} />
           </label>
         ) : (
@@ -166,11 +180,11 @@ export default function ProfileForm({ profile, onCancel }: ProfileFormProps) {
       <div className="account-form-actions">
         {onCancel && (
           <button type="button" className="button ghost dark" onClick={onCancel}>
-            Cancel
+            {t.cancel}
           </button>
         )}
         <button className="button primary" type="submit">
-          Save details
+          {t.save}
         </button>
       </div>
     </form>

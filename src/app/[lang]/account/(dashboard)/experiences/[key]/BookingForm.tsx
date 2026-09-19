@@ -9,7 +9,7 @@ import {
   CANCELLATION_CUTOFF_HOURS,
   formatPrice,
   formatTimeRange,
-  getExperience,
+  getLocalizedExperience,
   packAvailable,
   parseDate,
   PER_PERSON_PRICE_KEY,
@@ -17,6 +17,9 @@ import {
   type BookingWindow,
   type ExperienceSlot,
 } from "@/app/data/experiences";
+import type { Dictionary } from "@/i18n/dictionaries";
+import { htmlLang, type Locale } from "@/i18n/config";
+import { count, fill } from "@/i18n/interpolate";
 
 /** A catalogue slot annotated with how many of the 20 session spots are still open. */
 export type BookableSlot = ExperienceSlot & { remaining: number };
@@ -24,18 +27,25 @@ export type BookableSlot = ExperienceSlot & { remaining: number };
 export type PassOption = {
   sessionId: string;
   passKey: string;
+  /** Already localized by the page — this component never re-derives it. */
   passName: string;
   discountPercent: number;
+  /** "25% off" / "7.5折", shaped by `phrases` on the server. */
+  discountLabel: string;
   /** "1 Sep 2026 – 10 Sep 2026", or null for passes bought before trip dates existed. */
   tripLabel: string | null;
   window: BookingWindow;
   slotsByDate: Record<string, BookableSlot[]>;
 };
 
+type BookingCopy = Dictionary["account"]["bookingForm"];
+
 type BookingFormProps = {
   experienceKey: string;
   passOptions: PassOption[];
   defaultPassSessionId: string;
+  t: BookingCopy;
+  lang: Locale;
 };
 
 /* ---- Month arithmetic for the calendar, on "YYYY-MM" keys ---- */
@@ -50,12 +60,11 @@ function addMonths(month: string, delta: number): string {
   return shifted.toISOString().slice(0, 7);
 }
 
-function monthLabel(month: string): string {
-  return parseDate(`${month}-01`).toLocaleDateString("en-MY", {
-    timeZone: "UTC",
-    month: "long",
-    year: "numeric",
-  });
+function monthLabel(month: string, lang: Locale): string {
+  return parseDate(`${month}-01`).toLocaleDateString(
+    lang === "en" ? "en-MY" : htmlLang[lang],
+    { timeZone: "UTC", month: "long", year: "numeric" }
+  );
 }
 
 /** Every date in the month as "YYYY-MM-DD", plus the Monday-first leading blanks. */
@@ -73,8 +82,6 @@ function monthGrid(month: string): { blanks: number; dates: string[] } {
   return { blanks: (first.getUTCDay() + 6) % 7, dates };
 }
 
-const WEEKDAY_INITIALS = ["M", "T", "W", "T", "F", "S", "S"];
-
 /**
  * The whole booking flow on one screen: pick a pass (if there's a choice), a
  * date, a time, and who's coming — with the price updating as you go and a
@@ -82,14 +89,22 @@ const WEEKDAY_INITIALS = ["M", "T", "W", "T", "F", "S", "S"];
  *
  * Everything here is a convenience. The Server Action re-derives entitlement,
  * slot validity and the amount from the catalogue, so none of this state is
- * load-bearing for correctness.
+ * load-bearing for correctness — including `lang`, which only decides words.
  */
 export default function BookingForm({
   experienceKey,
   passOptions,
   defaultPassSessionId,
+  t,
+  lang,
 }: BookingFormProps) {
-  const experience = getExperience(experienceKey)!;
+  // Memoised because `getLocalizedExperience` builds a fresh object each call:
+  // an unstable reference here would invalidate `priceChoices` on every render,
+  // re-quoting the whole cart as the customer types in the notes field.
+  const experience = useMemo(
+    () => getLocalizedExperience(experienceKey, lang)!,
+    [experienceKey, lang]
+  );
 
   const [state, formAction, pending] = useActionState<BookingFormState, FormData>(createBooking, {
     error: null,
@@ -145,7 +160,12 @@ export default function BookingForm({
   // the requested figure intact, so picking a roomier slot restores it.
   const participants = Math.min(requestedParticipants, participantsMax);
 
-  const quote = quoteBooking(experience, pass.discountPercent, { participants, packageKey });
+  const quote = quoteBooking(
+    experience,
+    pass.discountPercent,
+    { participants, packageKey },
+    lang
+  );
 
   /**
    * The priced choices on offer: the fixed packages, or — where an experience
@@ -168,14 +188,14 @@ export default function BookingForm({
     const pack = experience.pricing.groupPack;
     const totalFor = (key: string) =>
       formatPrice(
-        quoteBooking(experience, pass.discountPercent, { participants, packageKey: key })
+        quoteBooking(experience, pass.discountPercent, { participants, packageKey: key }, lang)
           .totalCents
       );
 
     const perPerson = {
       key: PER_PERSON_PRICE_KEY,
-      label: "Per person",
-      note: `Your ${pass.passName} Pass rate for each of the ${participants}`,
+      label: t.perPerson,
+      note: fill(t.perPersonNote, { pass: pass.passName, n: participants }),
       price: totalFor(PER_PERSON_PRICE_KEY),
     };
 
@@ -187,7 +207,7 @@ export default function BookingForm({
       perPerson,
       { key: pack.key, label: pack.label, note: pack.note, price: totalFor(pack.key) },
     ];
-  }, [experience, pass.discountPercent, pass.passName, participants]);
+  }, [experience, pass.discountPercent, pass.passName, participants, t, lang]);
 
   const canSubmit = Boolean(slot) && acknowledged && !pending;
 
@@ -196,13 +216,16 @@ export default function BookingForm({
       <div className="xp-book-panel">
         <div className="account-inline-empty">
           <p>
-            There are no {experience.name} sessions we can offer you right now
             {pass.tripLabel
-              ? ` between ${pass.tripLabel} — bookings need ${BOOKING_LEAD_DAYS} days' notice.`
-              : "."}
+              ? fill(t.noSessionsInTrip, {
+                  experience: experience.name,
+                  trip: pass.tripLabel,
+                  days: BOOKING_LEAD_DAYS,
+                })
+              : fill(t.noSessions, { experience: experience.name })}
           </p>
           <Link className="button ghost dark" href="/contact">
-            Talk to our team
+            {t.talkToUs}
           </Link>
         </div>
       </div>
@@ -217,7 +240,7 @@ export default function BookingForm({
 
       {passOptions.length > 1 && (
         <fieldset className="xp-field">
-          <legend>Book with</legend>
+          <legend>{t.bookWith}</legend>
           <div className="xp-chip-row">
             {passOptions.map((option) => (
               <button
@@ -226,8 +249,8 @@ export default function BookingForm({
                 className={`xp-chip${option.sessionId === pass.sessionId ? " is-selected" : ""}`}
                 onClick={() => choosePass(option)}
               >
-                {option.passName} Pass
-                {option.discountPercent > 0 && <small>{option.discountPercent}% off</small>}
+                {fill(t.passChip, { pass: option.passName })}
+                {option.discountPercent > 0 && <small>{option.discountLabel}</small>}
               </button>
             ))}
           </div>
@@ -235,10 +258,10 @@ export default function BookingForm({
       )}
 
       <fieldset className="xp-field">
-        <legend>Pick a date</legend>
+        <legend>{t.pickDate}</legend>
         <p className="xp-field-hint">
-          Only dates with a session are selectable.
-          {pass.tripLabel && ` Limited to your trip: ${pass.tripLabel}.`}
+          {t.onlyAvailable}
+          {pass.tripLabel && fill(t.limitedToTrip, { trip: pass.tripLabel })}
         </p>
 
         <div className="xp-calendar">
@@ -248,24 +271,24 @@ export default function BookingForm({
               className="xp-calendar-nav"
               onClick={() => setMonth(addMonths(month, -1))}
               disabled={month <= firstMonth}
-              aria-label="Previous month"
+              aria-label={t.previousMonth}
             >
               ‹
             </button>
-            <span>{monthLabel(month)}</span>
+            <span>{monthLabel(month, lang)}</span>
             <button
               type="button"
               className="xp-calendar-nav"
               onClick={() => setMonth(addMonths(month, 1))}
               disabled={month >= lastMonth}
-              aria-label="Next month"
+              aria-label={t.nextMonth}
             >
               ›
             </button>
           </div>
 
           <div className="xp-calendar-grid" role="grid">
-            {WEEKDAY_INITIALS.map((initial, index) => (
+            {t.weekdayInitials.map((initial, index) => (
               <span key={index} className="xp-calendar-weekday" aria-hidden="true">
                 {initial}
               </span>
@@ -305,7 +328,7 @@ export default function BookingForm({
 
       {selectedDate && (
         <fieldset className="xp-field">
-          <legend>Pick a time</legend>
+          <legend>{t.pickTime}</legend>
           <div className="xp-chip-row">
             {daySlots.map((option) => {
               const full = option.remaining <= 0;
@@ -317,8 +340,8 @@ export default function BookingForm({
                   disabled={full}
                   onClick={() => setSlot(option.value)}
                 >
-                  {formatTimeRange(option.startMinutes, option.endMinutes)}
-                  <small>{full ? "Full" : `${option.remaining} spot${option.remaining === 1 ? "" : "s"} left`}</small>
+                  {formatTimeRange(option.startMinutes, option.endMinutes, lang)}
+                  <small>{full ? t.full : count(t.spotsLeft, option.remaining)}</small>
                 </button>
               );
             })}
@@ -328,12 +351,12 @@ export default function BookingForm({
 
       {experience.locationOptions && (
         <label className="admin-field xp-field">
-          <span>Location</span>
+          <span>{t.location}</span>
           <select name="location" value={location} onChange={(e) => setLocation(e.target.value)}>
             {experience.locationOptions.map((option) => (
               <option key={option.value} value={option.value} disabled={option.comingSoon}>
                 {option.label}
-                {option.comingSoon ? " — coming soon" : ""}
+                {option.comingSoon ? t.comingSoon : ""}
               </option>
             ))}
           </select>
@@ -341,38 +364,40 @@ export default function BookingForm({
       )}
 
       <fieldset className="xp-field">
-        <legend>Who&apos;s coming</legend>
+        <legend>{t.whosComing}</legend>
 
         <Stepper
           name="participants"
           label={experience.participants.label}
           hint={
             experience.pricing.mode === "group"
-              ? `Group package covers up to ${experience.pricing.includedParticipants}`
+              ? fill(t.groupCovers, { n: experience.pricing.includedParticipants })
               : undefined
           }
           value={participants}
           min={experience.participants.min}
           max={participantsMax}
           onChange={setRequestedParticipants}
+          t={t}
         />
 
         {experience.freeChildAgeUnder && (
           <Stepper
             name="childrenCount"
-            label={`Children under ${experience.freeChildAgeUnder}`}
-            hint="Join free — not counted above"
+            label={fill(t.childrenUnder, { age: experience.freeChildAgeUnder })}
+            hint={t.childrenFree}
             value={children}
             min={0}
             max={experience.participants.max}
             onChange={setChildren}
+            t={t}
           />
         )}
       </fieldset>
 
       {priceChoices.length > 0 && (
         <fieldset className="xp-field">
-          <legend>Choose your package</legend>
+          <legend>{t.choosePackage}</legend>
           <div className="xp-option-list">
             {priceChoices.map((choice) => (
               <label
@@ -398,17 +423,17 @@ export default function BookingForm({
       )}
 
       <label className="admin-field xp-field">
-        <span>Anything we should know? (optional)</span>
+        <span>{t.notes}</span>
         <textarea
           name="customerNotes"
           rows={3}
           maxLength={500}
-          placeholder="Dietary needs, mobility requirements, a birthday to mark…"
+          placeholder={t.notesPlaceholder}
         />
       </label>
 
       <div className="xp-summary">
-        <p className="xp-summary-title">Your booking</p>
+        <p className="xp-summary-title">{t.summary}</p>
         <ul className="xp-summary-lines">
           {quote.lines.map((line) => (
             <li key={line.label}>
@@ -418,7 +443,7 @@ export default function BookingForm({
           ))}
         </ul>
         <div className="xp-summary-total">
-          <span>Payable at the venue</span>
+          <span>{t.payableAtVenue}</span>
           <span className="xp-summary-total-amounts">
             {quote.savingsCents > 0 && (
               <span className="xp-summary-was">{formatPrice(quote.regularTotalCents)}</span>
@@ -429,7 +454,10 @@ export default function BookingForm({
         {quote.savingsCents > 0 && (
           <p className="xp-summary-saving">
             <Icon name="bolt" />
-            Your {pass.passName} Pass saves you {formatPrice(quote.savingsCents)} on this booking.
+            {fill(t.saving, {
+              pass: pass.passName,
+              amount: formatPrice(quote.savingsCents),
+            })}
           </p>
         )}
       </div>
@@ -441,9 +469,10 @@ export default function BookingForm({
           onChange={(e) => setAcknowledged(e.target.checked)}
         />
         <span>
-          I understand nothing is charged now — {formatPrice(quote.totalCents)} is payable at the
-          venue on the day — and that I can cancel free of charge up to{" "}
-          {CANCELLATION_CUTOFF_HOURS} hours before the session.
+          {fill(t.consent, {
+            amount: formatPrice(quote.totalCents),
+            hours: CANCELLATION_CUTOFF_HOURS,
+          })}
         </span>
       </label>
 
@@ -457,11 +486,11 @@ export default function BookingForm({
         {pending ? (
           <>
             <span className="checkout-spinner" aria-hidden="true" />
-            Booking…
+            {t.submitting}
           </>
         ) : (
           <>
-            Confirm booking
+            {t.submit}
             <Icon name="arrowRight" />
           </>
         )}
@@ -478,9 +507,10 @@ type StepperProps = {
   min: number;
   max: number;
   onChange: (value: number) => void;
+  t: BookingCopy;
 };
 
-function Stepper({ name, label, hint, value, min, max, onChange }: StepperProps) {
+function Stepper({ name, label, hint, value, min, max, onChange, t }: StepperProps) {
   return (
     <div className="xp-stepper">
       <span className="xp-stepper-label">
@@ -492,7 +522,7 @@ function Stepper({ name, label, hint, value, min, max, onChange }: StepperProps)
           type="button"
           onClick={() => onChange(Math.max(min, value - 1))}
           disabled={value <= min}
-          aria-label={`Fewer — ${label}`}
+          aria-label={fill(t.fewer, { label })}
         >
           −
         </button>
@@ -501,7 +531,7 @@ function Stepper({ name, label, hint, value, min, max, onChange }: StepperProps)
           type="button"
           onClick={() => onChange(Math.min(max, value + 1))}
           disabled={value >= max}
-          aria-label={`More — ${label}`}
+          aria-label={fill(t.more, { label })}
         >
           +
         </button>

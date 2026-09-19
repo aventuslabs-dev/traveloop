@@ -1,3 +1,5 @@
+import type { Locale } from "@/i18n/config";
+
 /**
  * Chinese labels for the registration dropdowns.
  *
@@ -82,3 +84,18 @@ export const relationshipLabelsCn: Record<string, string> = {
   Colleague: "同事",
   Other: "其他",
 };
+
+/**
+ * What to *show* for one of those stored English values.
+ *
+ * Shared by the checkout form and the customer portal so a nationality reads
+ * the same in both. Falls back to the stored value, which is already English
+ * prose — a missing translation shows the real answer rather than a blank.
+ */
+export function optionLabel(
+  value: string,
+  labels: Record<string, string>,
+  lang: Locale
+): string {
+  return lang === "cn" ? (labels[value] ?? value) : value;
+}

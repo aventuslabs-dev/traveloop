@@ -1,19 +1,33 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
+import Link from "@/i18n/Link";
+import { localePage, type LangParams } from "@/i18n/page";
+import { getDictionary } from "@/i18n/dictionaries";
+import { isLocale } from "@/i18n/config";
+import { notFound } from "next/navigation";
 import { Icon } from "@/app/components/Icons";
 import { login } from "./actions";
 
-export const metadata: Metadata = {
-  title: "Sign in to your account",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata({ params }: LangParams): Promise<Metadata> {
+  const { lang } = await params;
+  if (!isLocale(lang)) notFound();
+  const dict = await getDictionary(lang);
 
-type LoginPageProps = {
+  // No canonical or hreflang: the portal is noindex, so pointing crawlers at
+  // its other locale would only invite them to a page they're told to skip.
+  return {
+    title: dict.account.login.title,
+    robots: { index: false, follow: false },
+  };
+}
+
+type LoginPageProps = LangParams & {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
-export default async function AccountLoginPage({ searchParams }: LoginPageProps) {
+export default async function AccountLoginPage({ params, searchParams }: LoginPageProps) {
+  const { dict } = await localePage(params);
+  const t = dict.account.login;
   const hasError = (await searchParams).error === "1";
 
   return (
@@ -27,41 +41,40 @@ export default async function AccountLoginPage({ searchParams }: LoginPageProps)
           height={345}
           priority
         />
-        <h1>Sign in to your account</h1>
-        <p className="account-login-sub">
-          Use the email and password we sent you after your purchase.
-        </p>
+        <h1>{t.title}</h1>
+        <p className="account-login-sub">{t.sub}</p>
 
         {hasError && (
           <p className="account-flash is-error">
             <Icon name="alert" />
-            Incorrect email or password.
+            {t.failed}
           </p>
         )}
 
         <label className="admin-field">
-          <span>Email</span>
+          <span>{t.email}</span>
           <input name="email" type="email" autoComplete="email" required autoFocus />
         </label>
 
         <label className="admin-field">
-          <span>Password</span>
+          <span>{t.password}</span>
           <input name="password" type="password" autoComplete="current-password" required />
         </label>
 
         <button className="button primary" type="submit">
-          Sign in
+          {t.submit}
         </button>
 
         <p className="account-login-help">
-          Can&apos;t get in? <Link href="/contact">Contact our team</Link> and we&apos;ll sort it
-          out.
+          {t.helpBefore}
+          <Link href="/contact">{t.helpLink}</Link>
+          {t.helpAfter}
         </p>
       </form>
 
       <Link className="account-login-back" href="/">
         <Icon name="arrowRight" />
-        Back to traveloop.my
+        {t.back}
       </Link>
     </main>
   );

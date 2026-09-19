@@ -13,6 +13,7 @@ import { useLocale } from "@/i18n/Link";
 import {
   documentTypeLabelsCn,
   nationalityLabelsCn,
+  optionLabel,
   relationshipLabelsCn,
 } from "@/app/data/cn/registration";
 import type { Locale } from "@/i18n/config";
@@ -392,10 +393,6 @@ type RegistrationFieldsProps = {
  * translated — the server validates against that English allow-list and the
  * insurer's records must read the same whichever language the buyer used.
  */
-function optionLabel(value: string, labels: Record<string, string>, lang: Locale): string {
-  return lang === "cn" ? labels[value] ?? value : value;
-}
-
 function RegistrationFields({ fields, set, dict, lang }: RegistrationFieldsProps) {
   return (
     <>

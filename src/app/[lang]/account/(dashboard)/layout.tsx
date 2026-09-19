@@ -1,7 +1,8 @@
 import Image from "next/image";
-import Link from "next/link";
+import Link from "@/i18n/Link";
 import { createClient } from "@/lib/supabase/server";
 import { getCustomerProfile } from "@/lib/customer-profile-db";
+import { localePage, type LangParams } from "@/i18n/page";
 import { logout } from "../actions";
 import AccountNav from "./AccountNav";
 
@@ -10,7 +11,11 @@ function initialFor(name: string | null | undefined, email: string | null | unde
   return (name?.trim()?.[0] ?? email?.[0] ?? "?").toUpperCase();
 }
 
-export default async function AccountDashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function AccountDashboardLayout({
+  children,
+  params,
+}: LangParams & { children: React.ReactNode }) {
+  const { dict } = await localePage(params);
   const supabase = await createClient();
   const {
     data: { user },
@@ -39,13 +44,13 @@ export default async function AccountDashboardLayout({ children }: { children: R
           </Link>
           <form action={logout}>
             <button className="button ghost dark admin-logout" type="submit">
-              Sign out
+              {dict.account.header.signOut}
             </button>
           </form>
         </div>
       </header>
 
-      <AccountNav />
+      <AccountNav t={dict.account.nav} />
 
       <main className="account-main">{children}</main>
     </div>

@@ -13,7 +13,7 @@ import {
   SlotFullError,
 } from "@/lib/experience-bookings-db";
 import { sendBookingRequestEmail, sendBookingAdminAlert } from "@/lib/email";
-import { actionLocale } from "@/i18n/server";
+import { actionLocale, actionPath } from "@/i18n/server";
 import { getDictionary } from "@/i18n/dictionaries";
 import { bookingErrorMessage } from "@/i18n/errors";
 
@@ -37,7 +37,7 @@ export async function createBooking(
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/account/login");
+    redirect(await actionPath("/account/login"));
   }
 
   const orders = await getOrdersByUserId(user.id);
@@ -82,7 +82,7 @@ export async function createBooking(
   }
 
   revalidatePath("/account/bookings");
-  redirect(`/account/bookings?booked=${booking.reference}`);
+  redirect(await actionPath(`/account/bookings?booked=${booking.reference}`));
 }
 
 /** Customer-initiated cancellation, allowed up to the cutoff before the session. */
@@ -93,7 +93,7 @@ export async function cancelBooking(formData: FormData) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/account/login");
+    redirect(await actionPath("/account/login"));
   }
 
   const reference = String(formData.get("reference") ?? "").trim();
@@ -102,20 +102,20 @@ export async function cancelBooking(formData: FormData) {
   // Ownership is checked here *and* passed to the update as a filter, so a
   // reference belonging to someone else can neither be read back nor written.
   if (!booking || booking.userId !== user.id) {
-    redirect("/account/bookings?cancelError=1");
+    redirect(await actionPath("/account/bookings?cancelError=1"));
   }
 
   if (!isCancellableByCustomer(booking)) {
-    redirect("/account/bookings?cancelError=late");
+    redirect(await actionPath("/account/bookings?cancelError=late"));
   }
 
   try {
     await updateBookingStatus(reference, "cancelled", { expectedUserId: user.id });
   } catch (error) {
     console.error(`[bookings] Failed to cancel ${reference}:`, error);
-    redirect("/account/bookings?cancelError=1");
+    redirect(await actionPath("/account/bookings?cancelError=1"));
   }
 
   revalidatePath("/account/bookings");
-  redirect(`/account/bookings?cancelled=${reference}`);
+  redirect(await actionPath(`/account/bookings?cancelled=${reference}`));
 }

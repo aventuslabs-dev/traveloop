@@ -831,8 +831,8 @@ export function nextAvailableDate(experience: Experience, window: BookingWindow)
 }
 
 /** "Sat 15 Aug" — the compact form used on browse cards. */
-export function formatDateShort(date: string): string {
-  return parseDate(date).toLocaleDateString("en-MY", {
+export function formatDateShort(date: string, lang: Locale = "en"): string {
+  return parseDate(date).toLocaleDateString(lang === "en" ? "en-MY" : htmlLang[lang], {
     timeZone: "UTC",
     weekday: "short",
     day: "numeric",

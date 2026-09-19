@@ -1,10 +1,9 @@
 /**
- * Cultural-experience bookings made from the customer portal.
+ * Why a cultural-experience booking was refused.
  *
- * Only the failure messages so far. The portal's own chrome — headings,
- * labels, empty states — is still hardcoded English in
- * `app/[lang]/account/**`; when that gets localized, its copy belongs in this
- * namespace next to these.
+ * Only the failure messages: these are keyed off the `BookingError` union in
+ * lib/booking.ts and are resolved by `bookingErrorMessage`, which is what
+ * keeps them separate from the rest of the portal's copy in `account`.
  */
 const bookings = {
   /**

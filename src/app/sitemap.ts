@@ -11,13 +11,7 @@ type Entry = {
   lastModified?: string;
 };
 
-/**
- * Routes without a locale prefix, with the priority each carries.
- *
- * `/privacy` is missing on purpose — it is still placeholder copy and carries
- * `noindex`, and listing a page here that tells crawlers to stay away is a
- * contradiction they report as an error. Add it when the real policy lands.
- */
+/** Routes without a locale prefix, with the priority each carries. */
 const staticPaths: Entry[] = [
   { path: "", changeFrequency: "weekly", priority: 1 },
   { path: "/passes", changeFrequency: "weekly", priority: 0.9 },
@@ -28,6 +22,7 @@ const staticPaths: Entry[] = [
   { path: "/urban-sprint", changeFrequency: "weekly", priority: 0.5 },
   { path: "/urban-sprint/leaderboard", changeFrequency: "daily", priority: 0.4 },
   { path: "/terms", changeFrequency: "yearly", priority: 0.3 },
+  { path: "/privacy", changeFrequency: "yearly", priority: 0.3 },
 ];
 
 /**

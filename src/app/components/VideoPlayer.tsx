@@ -20,6 +20,8 @@ type YTPlayer = {
   pauseVideo: () => void;
   mute: () => void;
   unMute: () => void;
+  isMuted?: () => boolean;
+  getPlayerState?: () => number;
   seekTo: (seconds: number, allowSeekAhead: boolean) => void;
   setVolume: (volume: number) => void;
   getVolume: () => number;
@@ -47,7 +49,7 @@ type YTNamespace = {
       };
     }
   ) => YTPlayer;
-  PlayerState: { PLAYING: number };
+  PlayerState: { PLAYING: number; PAUSED: number };
 };
 
 declare global {
@@ -135,7 +137,9 @@ export function useVideoPlayer() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(100);
-  const [muted, setMuted] = useState(true);
+  // Every player starts from a click, so sound is on by default; the browser
+  // gets the last word and the fallbacks below correct this if it says no.
+  const [muted, setMuted] = useState(false);
   const [quality, setQuality] = useState("auto");
   const [availableQualities, setAvailableQualities] = useState<string[]>([]);
   const [source, setSource] = useState<VideoSource | null>(null);
@@ -149,6 +153,32 @@ export function useVideoPlayer() {
 
   const sourceKey = (s: VideoSource) => (s.kind === "youtube" ? s.id : s.src);
 
+  /**
+   * A YouTube player has to autoplay muted (`mute: 1`) to be sure it starts at
+   * all, so sound is switched on the moment it's ready. The click that opened
+   * the video usually still counts as the gesture that permits this, but the
+   * API script load in between can outlast it — and a browser that disagrees
+   * answers by pausing. Check back once, and rather than leave the viewer
+   * staring at a stalled frame, take muted playback instead.
+   */
+  function enableSound(target: YTPlayer) {
+    target.unMute();
+    target.setVolume(100);
+    setMuted(false);
+    setVolume(100);
+    setTimeout(() => {
+      if (playerRef.current !== target) return;
+      // Buffering isn't a refusal, so only an outright pause counts as one.
+      const refused =
+        (target.isMuted?.() ?? false) ||
+        target.getPlayerState?.() === window.YT.PlayerState.PAUSED;
+      if (!refused) return;
+      target.mute();
+      setMuted(true);
+      target.playVideo();
+    }, 700);
+  }
+
   function start(next: VideoSource, nextTitle?: string) {
     const key = sourceKey(next);
     activeSourceKey.current = key;
@@ -157,6 +187,8 @@ export function useVideoPlayer() {
     setPlaying(true);
     setPaused(true);
     setFailed(false);
+    setMuted(false);
+    setVolume(100);
     userPickedQuality.current = false;
 
     if (next.kind === "file") {
@@ -199,8 +231,7 @@ export function useVideoPlayer() {
             setHighestQuality(e.target);
             e.target.playVideo();
             setDuration(e.target.getDuration());
-            setVolume(e.target.getVolume());
-            setMuted(true);
+            enableSound(e.target);
             if (intervalRef.current) clearInterval(intervalRef.current);
             intervalRef.current = setInterval(() => {
               if (playerRef.current) {
@@ -236,6 +267,22 @@ export function useVideoPlayer() {
       setDuration(Number.isFinite(el.duration) ? el.duration : 0);
       setVolume(Math.round(el.volume * 100));
       setMuted(el.muted);
+    },
+    /**
+     * The element carries no `muted` attribute, so `autoPlay` asks for sound —
+     * which a browser may refuse even though the click that opened the video
+     * ought to permit it. Ask again here, and drop to muted playback rather
+     * than leave the clip sitting on its first frame.
+     */
+    onCanPlay: (e: SyntheticEvent<HTMLVideoElement>) => {
+      const el = e.currentTarget;
+      fileRef.current = el;
+      if (!el.paused) return;
+      el.play().catch(() => {
+        el.muted = true;
+        setMuted(true);
+        el.play().catch(() => {});
+      });
     },
     onDurationChange: (e: SyntheticEvent<HTMLVideoElement>) => {
       const el = e.currentTarget;
@@ -399,7 +446,6 @@ export function VideoStage({ player }: { player: VideoPlayer }) {
           preload="metadata"
           autoPlay
           playsInline
-          muted
         />
       ) : (
         <div id={player.elementId} />

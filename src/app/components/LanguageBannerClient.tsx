@@ -103,8 +103,21 @@ export default function LanguageBannerClient({
   const offer = matchAlternate(alternates);
   if (!offer) return null;
 
+  /**
+   * `translate="no"` for the same reason as the switcher, and with more at
+   * stake: every string here is deliberately in the *other* language, because
+   * it is the invitation a Chinese reader sees while stranded on the English
+   * page. Letting Chrome translate it back into English leaves the banner
+   * saying nothing its only audience needs.
+   */
   return (
-    <div className="lang-banner" role="region" aria-label={offer.text} lang={offer.lang}>
+    <div
+      className="lang-banner notranslate"
+      role="region"
+      aria-label={offer.text}
+      lang={offer.lang}
+      translate="no"
+    >
       <p className="lang-banner-text">{offer.text}</p>
       <Link
         className="lang-banner-action"

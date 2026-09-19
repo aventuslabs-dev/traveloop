@@ -15,6 +15,13 @@ import { fill } from "@/i18n/interpolate";
  * not the United States, and Chinese is read in Malaysia, Singapore and Taiwan
  * as much as in China.
  *
+ * `translate="no"` is what keeps that true in practice. Chrome's page
+ * translation rewrites `中文` into the English word "Chinese", which turns the
+ * one control a Chinese reader needs to find into a word they may not read —
+ * and it happens precisely on the English page, where they are most likely to
+ * be stuck. The attribute is the standard opt-out and covers the label and
+ * the `aria-label` alike.
+ *
  * They are real links, so middle-click and "open in new tab" work and crawlers
  * can follow them to the other locale — which is what makes the hreflang tags
  * in the layout mean anything.
@@ -81,7 +88,8 @@ export default function LanguageSwitcher({
             hrefLang={htmlLang[locale]}
             lang={htmlLang[locale]}
             onClick={onClick}
-            className={`lang-switch-option${isActive ? " active" : ""}`}
+            translate="no"
+            className={`lang-switch-option notranslate${isActive ? " active" : ""}`}
             aria-current={isActive ? "true" : undefined}
             aria-label={
               isActive ? undefined : fill(labels.switchTo, { language: localeName[locale] })

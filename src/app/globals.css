@@ -1087,7 +1087,12 @@ a.contact-card:hover { transform:translateY(-3px); box-shadow:0 18px 40px rgba(8
   .hero-bg-img { object-position:78% 55%; }
   .indian .experience-bg { background-position:80% center; }
   .lion .experience-bg { background-position:75% 20%; }
-  .modal, .modal:has(.film-video) {
+  /* Scoped to [open], and it has to be: `display:flex` on a bare `.modal`
+     beats the UA stylesheet's `dialog:not([open]) { display:none }`, so the
+     closed film dialog — which sits after the footer — rendered inline as a
+     full-screen black box with the player's loading spinner in the middle,
+     pinned to the foot of the page on phones. */
+  .modal[open], .modal[open]:has(.film-video) {
     width:100vw;height:100svh;max-width:none;max-height:none;border-radius:0;
     display:flex;flex-direction:column;justify-content:center;background:#000;
   }

@@ -29,7 +29,12 @@ export type Column = {
   sortable?: boolean;
 };
 
-export type Row = { id: string; cells: Record<string, Cell> };
+export type Row = {
+  id: string;
+  cells: Record<string, Cell>;
+  /** Extra text the search matches without it being shown, e.g. a code as typed with no separators. */
+  searchText?: string;
+};
 
 /** What a cell contributes to search, and how it sorts. */
 function cellText(cell: Cell | undefined): string {
@@ -121,6 +126,7 @@ export default function DataTable({
   rows,
   searchPlaceholder = "Search…",
   noun = "row",
+  nounPlural = `${noun}s`,
   emptyIcon = "search",
   emptyTitle = "Nothing here yet",
   emptyBody,
@@ -129,6 +135,8 @@ export default function DataTable({
   rows: Row[];
   searchPlaceholder?: string;
   noun?: string;
+  /** For nouns that don't pluralise with a plain "s" ("pass" → "passes"). */
+  nounPlural?: string;
   emptyIcon?: string;
   emptyTitle?: string;
   emptyBody?: string;
@@ -139,8 +147,10 @@ export default function DataTable({
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = q
-      ? rows.filter((row) =>
-          Object.values(row.cells).some((cell) => cellText(cell).toLowerCase().includes(q))
+      ? rows.filter(
+          (row) =>
+            row.searchText?.toLowerCase().includes(q) ||
+            Object.values(row.cells).some((cell) => cellText(cell).toLowerCase().includes(q))
         )
       : rows;
 
@@ -176,7 +186,7 @@ export default function DataTable({
         </label>
         <span className="ad-table-count">
           {visible.length === rows.length
-            ? `${rows.length} ${noun}${rows.length === 1 ? "" : "s"}`
+            ? `${rows.length} ${rows.length === 1 ? noun : nounPlural}`
             : `${visible.length} of ${rows.length}`}
         </span>
       </div>

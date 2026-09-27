@@ -1,9 +1,14 @@
 import PDFDocument from "pdfkit";
 import type { StoredOrder } from "./orders-db";
+import type { IssuedPassItem } from "./pass-registrations-db";
 import { LOGO_HEIGHT, LOGO_WIDTH, logoDataUri, logoPngBuffer } from "./invoice-logo";
+import { formatPassNumber } from "./pass-number";
+import { COLLECTION_POINT, collectionSteps } from "./pass-collection";
 
 export type InvoiceLineItem = {
   label: string;
+  /** A second, smaller line under the label: who the pass is for and its number. */
+  detail?: string;
   amountCents: number;
 };
 
@@ -27,19 +32,69 @@ const BRAND = {
   white: "#ffffff",
 };
 
-/** One row per registration when available, falling back to a single summary row for legacy orders. */
-export function invoiceLineItemsFor(
-  order: StoredOrder,
-  registrations: { passName: string; unitAmountCents: number }[]
-): InvoiceLineItem[] {
-  if (registrations.length === 0) {
+/** One row per pass when available, falling back to a single summary row for legacy orders. */
+export function invoiceLineItemsFor(order: StoredOrder, items: IssuedPassItem[]): InvoiceLineItem[] {
+  if (items.length === 0) {
     return [{ label: `Traveloop ${order.passName} Pass`, amountCents: order.amountTotal }];
   }
 
-  return registrations.map((reg) => ({
-    label: `Traveloop ${reg.passName} Pass`,
-    amountCents: reg.unitAmountCents,
+  return items.map((item) => ({
+    label: `Traveloop ${item.passName} Pass`,
+    // Number first: the PDF truncates this line with an ellipsis, and a long
+    // name must never be what pushes the pass number out of sight.
+    detail: [
+      item.passNumber ? `Pass No. ${formatPassNumber(item.passNumber)}` : null,
+      item.registration.fullName,
+    ]
+      .filter(Boolean)
+      .join("  ·  "),
+    // At list price, so the discounts below can be itemised against it.
+    // Passes sold before discounts existed have no list price, and their
+    // unit price already is the whole story.
+    amountCents: item.listAmountCents ?? item.unitAmountCents,
   }));
+}
+
+/**
+ * Subtotal and one negative row per discount, between the passes and the
+ * total — empty when the order had no discount, keeping older invoices as
+ * they were. Worded from the order itself, as recorded at purchase.
+ */
+function discountRowsFor(
+  order: StoredOrder,
+  lineItems: InvoiceLineItem[]
+): { label: string; amount: string; style: "item" | "subtotal" }[] {
+  const { automaticLabel, automaticCents, codeLabel, codeCents } = order.discount;
+  if (automaticCents === 0 && codeCents === 0) return [];
+
+  const subtotal = lineItems.reduce((sum, item) => sum + item.amountCents, 0);
+  // A plain hyphen: the PDF's built-in fonts have no U+2212 minus sign.
+  const less = (cents: number) => `- ${money(cents, order.currency)}`;
+
+  return [
+    { label: "Subtotal", amount: money(subtotal, order.currency), style: "subtotal" },
+    ...(automaticCents > 0
+      ? [{ label: automaticLabel ?? "Discount", amount: less(automaticCents), style: "item" as const }]
+      : []),
+    ...(codeCents > 0
+      ? [
+          {
+            label: `Discount code ${codeLabel ?? order.discount.code ?? ""}`.trim(),
+            amount: less(codeCents),
+            style: "item" as const,
+          },
+        ]
+      : []),
+  ];
+}
+
+/** The "Pass Collection" rows — where to go, when, and what to bring. */
+function collectionRowsFor(order: StoredOrder): { label: string; value: string }[] {
+  return [
+    { label: "Collection Point", value: `${COLLECTION_POINT.place}. ${COLLECTION_POINT.directions}` },
+    { label: "Opening Hours", value: COLLECTION_POINT.hours },
+    { label: "Please Bring", value: collectionSteps(order.quantity).join(" ") },
+  ];
 }
 
 function money(amountMinor: number, currency: string): string {
@@ -214,6 +269,7 @@ export function buildInvoiceHtml(order: StoredOrder, lineItems: InvoiceLineItem[
     background: var(--header-fill);
   }
   .items thead th.amount { text-align: right; }
+  .item-detail { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
   .subtotal td, .subtotal th { font-weight: 600; }
   .grand th, .grand td {
     background: var(--blue);
@@ -287,8 +343,18 @@ export function buildInvoiceHtml(order: StoredOrder, lineItems: InvoiceLineItem[
         ${lineItems
           .map(
             (item) => `<tr>
-          <td colspan="2">${escapeHtml(item.label)}</td>
+          <td colspan="2">${escapeHtml(item.label)}${
+            item.detail ? `<span class="item-detail">${escapeHtml(item.detail)}</span>` : ""
+          }</td>
           <td class="amount">${money(item.amountCents, order.currency)}</td>
+        </tr>`
+          )
+          .join("\n")}
+        ${discountRowsFor(order, lineItems)
+          .map(
+            (row) => `<tr${row.style === "subtotal" ? ' class="subtotal"' : ""}>
+          <td colspan="2">${escapeHtml(row.label)}</td>
+          <td class="amount">${escapeHtml(row.amount)}</td>
         </tr>`
           )
           .join("\n")}
@@ -300,6 +366,13 @@ export function buildInvoiceHtml(order: StoredOrder, lineItems: InvoiceLineItem[
           <td colspan="2">GRAND TOTAL</td>
           <td class="amount">${money(order.amountTotal, order.currency)}</td>
         </tr>
+      </tbody>
+    </table>
+
+    <table>
+      <caption>Pass Collection</caption>
+      <tbody>
+        ${labelledRows(collectionRowsFor(order))}
       </tbody>
     </table>
 
@@ -417,10 +490,14 @@ export function buildInvoicePdf(order: StoredOrder, lineItems: InvoiceLineItem[]
       return margin;
     }
 
-    /** A full-width banner row (the grey caption above each table). */
-    function sectionHead(start: number, text: string): number {
+    /**
+     * A full-width banner row (the grey caption above each table). `keepWith`
+     * is how much of what follows must fit on the same page, so a short
+     * section moves to the next page whole instead of splitting.
+     */
+    function sectionHead(start: number, text: string, keepWith = 22): number {
       const height = 21;
-      const top = fit(start, height + 22);
+      const top = fit(start, height + keepWith);
       doc.rect(left, top, width, height).fill(BRAND.headerFill);
       doc.rect(left, top, width, height).lineWidth(0.7).strokeColor(BRAND.line).stroke();
       doc
@@ -457,17 +534,18 @@ export function buildInvoicePdf(order: StoredOrder, lineItems: InvoiceLineItem[]
       return top + height;
     }
 
-    /** A priced row: description on the left, right-aligned amount on the right. */
+    /** A priced row: description (and optional detail line) on the left, right-aligned amount on the right. */
     function amountRow(
       start: number,
       label: string,
       amount: string,
-      style: "item" | "subtotal" | "grand" = "item"
+      style: "item" | "subtotal" | "grand" = "item",
+      detail?: string
     ): number {
-      const height = style === "grand" ? 28 : 22;
+      const height = style === "grand" ? 28 : detail ? 35 : 22;
       const top = fit(start, height);
       const bold = style !== "item";
-      const textTop = top + (height - (style === "grand" ? 11 : 9.5)) / 2 - 1;
+      const textTop = detail ? top + padY : top + (height - (style === "grand" ? 11 : 9.5)) / 2 - 1;
 
       if (style === "grand") {
         doc.rect(left, top, width, height).fill(BRAND.blue);
@@ -485,6 +563,17 @@ export function buildInvoicePdf(order: StoredOrder, lineItems: InvoiceLineItem[]
         .font(bold ? "Helvetica-Bold" : "Helvetica")
         .fontSize(style === "grand" ? 11 : 9.5)
         .text(label, left + padX, textTop, { width: width - amountWidth - padX * 2 });
+      if (detail) {
+        doc
+          .fillColor(BRAND.muted)
+          .font("Helvetica")
+          .fontSize(8.5)
+          .text(detail, left + padX, textTop + 13, {
+            width: width - amountWidth - padX * 2,
+            height: 11,
+            ellipsis: true,
+          });
+      }
       doc
         .fillColor(ink)
         .font(bold ? "Helvetica-Bold" : "Helvetica")
@@ -523,10 +612,21 @@ export function buildInvoicePdf(order: StoredOrder, lineItems: InvoiceLineItem[]
       y = labelRow(y, row.label, row.value);
     }
     for (const item of lineItems) {
-      y = amountRow(y, item.label, money(item.amountCents, order.currency));
+      y = amountRow(y, item.label, money(item.amountCents, order.currency), "item", item.detail);
+    }
+    for (const row of discountRowsFor(order, lineItems)) {
+      y = amountRow(y, row.label, row.amount, row.style);
     }
     y = amountRow(y, "Total Charge", money(order.amountTotal, order.currency), "subtotal");
-    amountRow(y, "GRAND TOTAL", money(order.amountTotal, order.currency), "grand");
+    y = amountRow(y, "GRAND TOTAL", money(order.amountTotal, order.currency), "grand");
+
+    // ---- Where to collect the physical pass -------------------------------
+    // Three short rows — ~36pt each at most, the first wrapping to two lines.
+    const collectionRows = collectionRowsFor(order);
+    y = sectionHead(y + 22, "Pass Collection", collectionRows.length * 36);
+    for (const row of collectionRows) {
+      y = labelRow(y, row.label, row.value);
+    }
 
     // ---- Footer, pinned to the bottom of the page -------------------------
     const footTop = doc.page.height - margin - 22;

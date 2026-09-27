@@ -12,8 +12,12 @@ import AdminShell from "./AdminShell";
 async function loadCounts() {
   try {
     const db = getSupabase();
-    const [orders, bookings, customers, failedPayments] = await Promise.all([
+    const [orders, passesAwaiting, bookings, customers, failedPayments] = await Promise.all([
       db.from("orders").select("*", { count: "exact", head: true }),
+      db
+        .from("pass_registrations")
+        .select("*", { count: "exact", head: true })
+        .is("collected_at", null),
       db
         .from("experience_bookings")
         .select("*", { count: "exact", head: true })
@@ -34,6 +38,7 @@ async function loadCounts() {
 
     return {
       orders: orders.count ?? 0,
+      passesAwaitingCollection: passesAwaiting.count ?? 0,
       bookings: bookings.count ?? 0,
       customers: customers.length,
       failedPayments,
@@ -41,7 +46,7 @@ async function loadCounts() {
   } catch {
     // The chrome must render even if a count query fails; the pages themselves
     // surface real errors.
-    return { orders: 0, bookings: 0, customers: 0, failedPayments: 0 };
+    return { orders: 0, bookings: 0, customers: 0, failedPayments: 0, passesAwaitingCollection: 0 };
   }
 }
 

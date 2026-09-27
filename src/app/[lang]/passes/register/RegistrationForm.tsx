@@ -8,6 +8,13 @@ import {
   EMERGENCY_RELATIONSHIPS,
 } from "@/lib/registration";
 import InsuranceTerms from "@/app/components/InsuranceTerms";
+import {
+  formatCents,
+  formatPercent,
+  quoteCart,
+  type CartQuote,
+  type DiscountRule,
+} from "@/lib/pricing";
 import { fill } from "@/i18n/interpolate";
 import { useLocale } from "@/i18n/Link";
 import {
@@ -23,7 +30,10 @@ import type { InsuranceDoc } from "@/i18n/legal";
 type RegistrationDict = typeof enRegistration;
 
 type RegistrationFormProps = {
+  /** Already priced with `automaticDiscount`. */
   passTiers: PassTier[];
+  /** The live launch discount, for the breakdown under the cart. */
+  automaticDiscount: DiscountRule | null;
   seedPassKey?: PassKey;
   dict: RegistrationDict;
   /** The insurance contract, in the locale being bought in. */
@@ -81,6 +91,7 @@ function newCartItem(passKey: PassKey): CartItem {
  */
 export default function RegistrationForm({
   passTiers,
+  automaticDiscount,
   seedPassKey,
   dict,
   insurance,
@@ -93,9 +104,54 @@ export default function RegistrationForm({
   const [accepted, setAccepted] = useState(false);
   const [status, setStatus] = useState<"idle" | "redirecting">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [codeInput, setCodeInput] = useState("");
+  const [appliedCode, setAppliedCode] = useState<DiscountRule | null>(null);
+  const [codeStatus, setCodeStatus] = useState<"idle" | "checking">("idle");
+  const [codeError, setCodeError] = useState<string | null>(null);
 
   function tierFor(passKey: PassKey): PassTier {
     return passTiers.find((t) => t.key === passKey)!;
+  }
+
+  // A preview: /api/checkout recomputes all of this from list prices.
+  const quote = quoteCart(
+    cart.map((item) => tierFor(item.passKey).listPriceCents),
+    automaticDiscount,
+    appliedCode
+  );
+
+  async function applyCode() {
+    const code = codeInput.trim();
+    if (!code || codeStatus === "checking") return;
+
+    setCodeStatus("checking");
+    setCodeError(null);
+    try {
+      const response = await fetch("/api/discounts/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const data: { rule?: DiscountRule; error?: string } = await response
+        .json()
+        .catch(() => ({}));
+
+      if (!response.ok || !data.rule) {
+        setCodeError(data.error ?? dict.errors.checkoutFailed);
+      } else {
+        setAppliedCode(data.rule);
+        setCodeInput("");
+      }
+    } catch {
+      setCodeError(dict.errors.network);
+    } finally {
+      setCodeStatus("idle");
+    }
+  }
+
+  function removeCode() {
+    setAppliedCode(null);
+    setCodeError(null);
   }
 
   function addToCart(passKey: PassKey) {
@@ -190,7 +246,7 @@ export default function RegistrationForm({
       const response = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, discountCode: appliedCode?.code ?? null }),
       });
 
       const data: { url?: string; error?: string } = await response.json().catch(() => ({}));
@@ -209,8 +265,6 @@ export default function RegistrationForm({
   }
 
   if (step === "cart") {
-    const total = cart.reduce((sum, item) => sum + tierFor(item.passKey).priceCents, 0);
-
     return (
       <div className="register-card">
         <p className="register-step">{fill(dict.steps.label, { n: 1, total: 3 })}</p>
@@ -222,7 +276,10 @@ export default function RegistrationForm({
             <div className="cart-tier-row" key={tier.key}>
               <div className="cart-tier-row-info">
                 <strong>{tier.name}</strong>
-                <span className="cart-tier-row-price">MYR {tier.price}</span>
+                <span className="cart-tier-row-price">
+                  {tier.discounted && <s>MYR {tier.originalPrice}</s>}
+                  MYR {tier.price}
+                </span>
               </div>
               <button type="button" className="button ghost dark" onClick={() => addToCart(tier.key)}>
                 {dict.cart.add}
@@ -258,14 +315,61 @@ export default function RegistrationForm({
         )}
 
         {cart.length > 0 && (
-          <div className="cart-total">
-            <span>
-              {fill(cart.length === 1 ? dict.cart.totalOne : dict.cart.totalMany, {
-                count: cart.length,
-              })}
-            </span>
-            <span>MYR {(total / 100).toFixed(2)}</span>
-          </div>
+          <>
+            <div className="cart-code">
+              {appliedCode ? (
+                <p className="cart-code-applied">
+                  <span>{fill(dict.cart.codeApplied, { code: appliedCode.code ?? "" })}</span>
+                  <button type="button" className="cart-code-remove" onClick={removeCode}>
+                    {dict.cart.removeCode}
+                  </button>
+                </p>
+              ) : (
+                <label className="cart-code-field">
+                  <span>{dict.cart.codeLabel}</span>
+                  <span className="cart-code-row">
+                    <input
+                      type="text"
+                      value={codeInput}
+                      onChange={(e) => setCodeInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void applyCode();
+                        }
+                      }}
+                      placeholder={dict.cart.codePlaceholder}
+                      autoComplete="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      aria-invalid={codeError ? true : undefined}
+                    />
+                    <button
+                      type="button"
+                      className="button ghost dark"
+                      onClick={() => void applyCode()}
+                      disabled={!codeInput.trim() || codeStatus === "checking"}
+                    >
+                      {codeStatus === "checking" ? dict.cart.applying : dict.cart.apply}
+                    </button>
+                  </span>
+                </label>
+              )}
+              {codeError && (
+                <p className="cart-code-error" role="alert">
+                  {codeError}
+                </p>
+              )}
+            </div>
+
+            <PriceSummary
+              quote={quote}
+              count={cart.length}
+              automatic={automaticDiscount}
+              code={appliedCode}
+              dict={dict.cart}
+            />
+          </>
         )}
 
         <div className="register-actions">
@@ -333,6 +437,15 @@ export default function RegistrationForm({
         <InsuranceTerms dict={insurance} />
       </div>
 
+      <PriceSummary
+        quote={quote}
+        count={cart.length}
+        automatic={automaticDiscount}
+        code={appliedCode}
+        dict={dict.cart}
+        onRemoveCode={status === "redirecting" ? undefined : removeCode}
+      />
+
       <label className="register-consent">
         <input
           type="checkbox"
@@ -378,6 +491,76 @@ export default function RegistrationForm({
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Subtotal, each discount and the total. With no discount at all it collapses
+ * to the single total line the cart always had.
+ */
+function PriceSummary({
+  quote,
+  count,
+  automatic,
+  code,
+  dict,
+  onRemoveCode,
+}: {
+  quote: CartQuote;
+  count: number;
+  automatic: DiscountRule | null;
+  code: DiscountRule | null;
+  dict: RegistrationDict["cart"];
+  onRemoveCode?: () => void;
+}) {
+  const launchLabel =
+    automatic?.kind === "percent"
+      ? fill(dict.launchPercent, {
+          percent: formatPercent(automatic.value),
+          zhe: formatPercent((100 - automatic.value) / 10),
+        })
+      : automatic
+        ? fill(dict.launchAmount, { amount: formatCents(automatic.value) })
+        : "";
+  const hasDiscount = quote.automaticDiscountCents > 0 || code !== null;
+
+  return (
+    <div className="cart-summary">
+      {hasDiscount && (
+        <dl className="cart-summary-lines">
+          <div>
+            <dt>{dict.subtotal}</dt>
+            <dd>MYR {formatCents(quote.subtotalCents)}</dd>
+          </div>
+          {quote.automaticDiscountCents > 0 && (
+            <div className="is-saving">
+              <dt>{launchLabel}</dt>
+              <dd>− MYR {formatCents(quote.automaticDiscountCents)}</dd>
+            </div>
+          )}
+          {code && (
+            <div className="is-saving">
+              <dt>
+                {fill(dict.codeApplied, { code: code.code ?? "" })}
+                {onRemoveCode && (
+                  <button type="button" className="cart-code-remove" onClick={onRemoveCode}>
+                    {dict.removeCode}
+                  </button>
+                )}
+              </dt>
+              <dd>− MYR {formatCents(quote.codeDiscountCents)}</dd>
+            </div>
+          )}
+        </dl>
+      )}
+      {code && quote.codeDiscountCents === 0 && (
+        <p className="cart-code-error">{dict.codeNoEffect}</p>
+      )}
+      <div className="cart-total">
+        <span>{fill(count === 1 ? dict.totalOne : dict.totalMany, { count })}</span>
+        <span>MYR {formatCents(quote.totalCents)}</span>
+      </div>
+    </div>
   );
 }
 

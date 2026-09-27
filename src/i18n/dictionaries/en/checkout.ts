@@ -36,8 +36,8 @@ const checkout = {
      * `{email}` is filled with `emailSuffix`, or left empty when unknown.
      */
     paidLede:
-      "Your {pass} is confirmed. We've sent a receipt{email}, and your pass " +
-      "details will follow by email shortly.",
+      "Your {pass} is confirmed and your receipt is on its way{email}. " +
+      "Here's how to pick up your physical pass when you land in Penang.",
     paidEmailSuffix: " to {email}",
 
     processingLede:
@@ -70,6 +70,39 @@ const checkout = {
       "receipt is on its way by email. Get in touch and we'll confirm the details for you.",
     contactUs: "Contact us",
     backToPasses: "Back to passes",
+  },
+
+  /** Each traveller's pass number — on /passes/success and the customer portal. */
+  passNumbers: {
+    heading: { one: "Your pass number", other: "Your pass numbers" },
+    hint: "Show this at the counter — no printout needed. It's in your email too.",
+    /** Before Stripe's webhook has run, the numbers don't exist yet. */
+    pending:
+      "Your pass number is being issued. It will be in your confirmation email " +
+      "and your Customer Portal within a few minutes.",
+    ready: "Ready to collect",
+    /** `{date}` is when it was handed over. */
+    collected: "Collected {date}",
+  },
+
+  /** Where to pick up the physical pass. The receipt email and PDF carry the same, in English. */
+  collection: {
+    eyebrow: "Collect your physical pass",
+    place: "Penang International Airport",
+    area: "Arrival Hall",
+    directions:
+      "Walk out of the Arrival Hall and the yellow Airport Taxi Services counter " +
+      "is right in front of you.",
+    hours: "Open daily, 7:00 AM until the last flight.",
+    stepsHeading: "At the counter",
+    steps: {
+      one: ["Show your passport.", "Give your pass number."],
+      other: ["Show the passport of each traveller.", "Give the pass number for each pass."],
+    },
+    map: "Open in Google Maps",
+    photoAlt:
+      "The yellow Airport Taxi Services counter just outside the Arrival Hall at " +
+      "Penang International Airport",
   },
 };
 

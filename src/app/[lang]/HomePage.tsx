@@ -24,6 +24,7 @@ import type enCommon from "@/i18n/dictionaries/en/common";
 import type enHome from "@/i18n/dictionaries/en/home";
 
 export default function Home({
+  launchBadge,
   dict,
   nav,
   language,
@@ -36,6 +37,8 @@ export default function Home({
   language: typeof enCommon.language;
   footer: typeof enCommon.footer;
   tiers: PassTier[];
+  /** Null when no automatic discount is running — the price then shows without a strikethrough. */
+  launchBadge: string | null;
   partners: LocalizedPartner[];
 }) {
   /** Cheapest tier, so the "starting from" price and its strikethrough always belong together. */
@@ -591,16 +594,18 @@ export default function Home({
           <div className="what-cta reveal">
             <p className="what-cta-label">{dict.what.startingFrom}</p>
             <div className="what-cta-price">
-              <s>
-                <small>MYR</small>
-                {cheapestTier.originalPrice}
-              </s>
+              {cheapestTier.discounted && (
+                <s>
+                  <small>MYR</small>
+                  {cheapestTier.originalPrice}
+                </s>
+              )}
               <strong>
                 <small>MYR</small>
                 {cheapestTier.price}
               </strong>
             </div>
-            <span className="tier-discount-badge">{dict.what.launchDiscount}</span>
+            {launchBadge && <span className="tier-discount-badge">{launchBadge}</span>}
             <Link className="button primary tier-purchase-cta" href="/passes">
               {dict.what.cta}
             </Link>

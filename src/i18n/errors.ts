@@ -2,6 +2,7 @@ import { fill } from "./interpolate";
 import type { Dictionary } from "./dictionaries";
 import type { BookingError } from "@/lib/booking";
 import type { RegistrationError } from "@/lib/registration";
+import type { CodeLookup } from "@/lib/discounts-db";
 
 /**
  * Turns the validators' error keys into a sentence the buyer can read.
@@ -70,5 +71,22 @@ export function bookingErrorMessage(
       return t.locationRequired;
     case "locationComingSoon":
       return fill(t.locationComingSoon, { location: error.location });
+  }
+}
+
+/** Why a discount code was refused, for the cart and the checkout route. */
+export function discountErrorMessage(
+  reason: Extract<CodeLookup, { ok: false }>["reason"],
+  t: Dictionary["registration"]["errors"]
+): string {
+  switch (reason) {
+    case "unknown":
+      return t.discountUnknown;
+    case "scheduled":
+      return t.discountScheduled;
+    case "ended":
+      return t.discountEnded;
+    case "usedUp":
+      return t.discountUsedUp;
   }
 }

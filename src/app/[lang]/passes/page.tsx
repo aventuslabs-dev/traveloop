@@ -1,12 +1,21 @@
-import { getPassComparison, getPassTiers, PASS_CURRENCY } from "@/app/data/passes";
+import { getPassComparison, getPassTiers, launchBadge, PASS_CURRENCY } from "@/app/data/passes";
+import { getActiveAutomaticDiscount } from "@/lib/discounts-db";
 import { localePage, type LangParams } from "@/i18n/page";
 import JsonLd from "@/app/components/JsonLd";
 import { breadcrumbJsonLd, faqJsonLd, jsonLdGraph, productJsonLd } from "@/lib/seo";
 import PassesPageClient from "./PassesPageClient";
 
+/**
+ * Prices carry the live automatic discount. Editing it in /admin/discounts
+ * revalidates this page straight away; the timer catches a discount's own
+ * start or end date passing, which nothing announces.
+ */
+export const revalidate = 300;
+
 export default async function PassesPage({ params }: LangParams) {
   const { lang, dict } = await localePage(params);
-  const tiers = getPassTiers(lang);
+  const automatic = await getActiveAutomaticDiscount();
+  const tiers = getPassTiers(lang, automatic);
 
   return (
     <>
@@ -37,6 +46,7 @@ export default async function PassesPage({ params }: LangParams) {
       />
       <PassesPageClient
         tiers={tiers}
+        launchBadge={launchBadge(automatic, dict.passes.pricing.launchDiscount)}
         comparison={getPassComparison(lang)}
         dict={dict.passes}
         nav={dict.common.nav}

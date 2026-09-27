@@ -16,6 +16,17 @@ const registration: typeof en = {
     totalOne: "合计（{count} 张通行证）",
     totalMany: "合计（{count} 张通行证）",
     continue: "继续填写登记资料",
+
+    subtotal: "小计",
+    launchPercent: "开卡优惠（{zhe} 折）",
+    launchAmount: "开卡优惠（每张立减 MYR {amount}）",
+    codeLabel: "优惠码",
+    codePlaceholder: "输入优惠码",
+    apply: "使用",
+    applying: "验证中…",
+    codeApplied: "优惠码 {code}",
+    removeCode: "移除",
+    codeNoEffect: "此优惠码无法再降低本订单金额。",
   },
 
   details: {
@@ -77,6 +88,12 @@ const registration: typeof en = {
     invalidDepartureDate: "请填写有效的离境日期。",
     dateOrder: "离境日期必须等于或晚于入境日期。",
     termsNotAccepted: "请先同意条款与条件，才能继续。",
+
+    discountUnknown: "此优惠码无效，请检查拼写后重试。",
+    discountScheduled: "此优惠码尚未生效。",
+    discountEnded: "此优惠码已过期。",
+    discountUsedUp: "此优惠码已被领完。",
+    discountCheckFailed: "暂时无法验证此优惠码，请稍后再试。",
 
     /** 嵌入上面句子中的字段名称，因此不带标点。 */
     fieldNames: {

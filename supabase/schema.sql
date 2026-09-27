@@ -246,6 +246,50 @@ create policy "Customers can view their own pass registrations"
 create index if not exists pass_registrations_order_idx on pass_registrations (order_session_id);
 create index if not exists pass_registrations_user_idx on pass_registrations (user_id, created_at desc);
 
+-- Pass numbers: the 16-character code each traveller quotes, with their
+-- passport, to collect the physical pass at the airport counter. One per
+-- pass_registrations row, because a pass belongs to one traveller.
+--
+-- Generated here as a column default rather than in the app so that no row
+-- can exist without one, and so adding the column numbers every pass sold
+-- before it existed: Postgres evaluates a volatile default once per existing
+-- row. The app only ever formats and looks these up (src/lib/pass-number.ts).
+--
+-- The alphabet is A–Z and 2–9 minus I, O, 0 and 1 — the characters staff
+-- misread off a phone screen. 32 symbols divide 256 evenly, so taking each
+-- random byte mod 32 stays uniform: 16 of them is 80 bits, which makes a
+-- collision (caught by the unique index regardless) or a guessed number
+-- practically impossible.
+create extension if not exists pgcrypto with schema extensions;
+
+create or replace function public.generate_pass_number()
+returns text
+language plpgsql
+volatile
+set search_path = ''
+as $$
+declare
+  alphabet constant text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  bytes bytea := extensions.gen_random_bytes(16);
+  result text := '';
+begin
+  for i in 0..15 loop
+    result := result || substr(alphabet, get_byte(bytes, i) % 32 + 1, 1);
+  end loop;
+  return result;
+end;
+$$;
+
+alter table pass_registrations
+  add column if not exists pass_number text not null default public.generate_pass_number();
+
+create unique index if not exists pass_registrations_pass_number_key
+  on pass_registrations (pass_number);
+
+-- When the traveller picked the physical pass up from the counter. Null means
+-- it's still waiting there. Set from /admin/passes.
+alter table pass_registrations add column if not exists collected_at timestamptz;
+
 -- Checkouts that never became orders: a declined card, an FPX payment that
 -- failed to settle, or a session the buyer walked away from
 -- (src/app/api/webhooks/stripe/route.ts). The orders table only ever holds
@@ -327,3 +371,73 @@ $$;
 
 revoke all on function public.auth_user_id_for_email(text) from public;
 revoke all on function public.auth_user_id_for_email(text) from anon, authenticated;
+
+-- Discounts (src/lib/discounts-db.ts, managed at /admin/discounts).
+--
+-- Two kinds, told apart by `automatic`:
+--
+--   - Automatic: no code, applied to every pass while it's live — the launch
+--     discount. `percent` takes that share off each pass; `amount` takes that
+--     many sen off each pass. At most one is switched on at a time (index
+--     below), so there's never a question of which applies.
+--   - Codes: typed into the cart, applied on top of the automatic discount to
+--     the whole order. `percent` takes that share of the order; `amount` takes
+--     that many sen off the order once, however many passes it has.
+--
+-- `value` is a percentage (decimals allowed) for `percent`, and sen for
+-- `amount`. The maths lives in src/lib/pricing.ts, the one place both the
+-- cart and checkout compute prices from.
+--
+-- Uses are not counted here: a code's redemptions are the paid orders that
+-- carry its id (orders.discount_id), so an abandoned checkout never uses one
+-- up and the count can't drift from the orders it describes.
+create table if not exists discounts (
+  id bigint generated always as identity primary key,
+  -- Stored upper-case; null exactly when the discount is automatic.
+  code text,
+  -- Shown to the buyer and on the invoice, e.g. "Launch discount".
+  label text not null,
+  kind text not null check (kind in ('percent', 'amount')),
+  value numeric not null check (value > 0),
+  automatic boolean not null default false,
+  active boolean not null default true,
+  starts_at timestamptz,
+  ends_at timestamptz,
+  -- Codes only: null means unlimited.
+  max_redemptions integer check (max_redemptions is null or max_redemptions > 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint discounts_code_matches_kind check ((automatic and code is null) or (not automatic and code is not null)),
+  constraint discounts_percent_range check (kind <> 'percent' or value <= 100)
+);
+
+create unique index if not exists discounts_code_key on discounts (code) where code is not null;
+create unique index if not exists discounts_one_active_automatic on discounts (automatic) where automatic and active;
+
+-- Service-role only (no policies): checkout and the admin console are the
+-- only readers, and a customer has no business listing codes.
+alter table discounts enable row level security;
+
+-- The launch discount the site has always advertised, now editable. 50% of
+-- the list prices in src/app/data/passes.ts (79.80 / 139.80 / 179.80) is
+-- exactly the 39.90 / 69.90 / 89.90 charged before discounts existed.
+insert into discounts (label, kind, value, automatic)
+select 'Launch discount', 'percent', 50, true
+where not exists (select 1 from discounts where automatic);
+
+-- What each order was discounted by, as worded and computed at purchase, so
+-- the invoice still reads the same after a discount is edited or deleted.
+-- Zero / null for orders placed before discounts existed.
+alter table orders add column if not exists automatic_discount_label text;
+alter table orders add column if not exists automatic_discount_cents integer not null default 0;
+alter table orders add column if not exists discount_id bigint references discounts(id) on delete set null;
+alter table orders add column if not exists discount_code text;
+alter table orders add column if not exists discount_label text;
+alter table orders add column if not exists discount_cents integer not null default 0;
+
+create index if not exists orders_discount_idx on orders (discount_id) where discount_id is not null;
+
+-- Each pass's price before any discount, for the invoice's line items. Null
+-- for passes sold before discounts existed, whose unit_amount_cents already
+-- is the whole story.
+alter table pass_registrations add column if not exists list_amount_cents integer;

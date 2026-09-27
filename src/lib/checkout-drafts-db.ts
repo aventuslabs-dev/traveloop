@@ -5,7 +5,10 @@ import type { PassRegistration } from "./registration";
 export type DraftItem = {
   passKey: string;
   passName: string;
+  /** Price after the automatic discount, before any code — what the pass itself costs. */
   unitAmountCents: number;
+  /** Price before any discount. Absent on drafts written before discounts existed. */
+  listAmountCents?: number;
   registration: PassRegistration;
 };
 

@@ -171,7 +171,10 @@ const home: typeof en = {
     body2: "你只需要好好享受",
     body3: "。",
     startingFrom: "三个等级，最低仅需",
-    launchDiscount: "已应用 5 折专属开卡优惠！",
+    launchDiscount: {
+      percent: "已应用 {zhe} 折专属开卡优惠！",
+      amount: "每张通行证立减 MYR {amount}，已应用专属开卡优惠！",
+    },
     cta: "购买通行证",
   },
 

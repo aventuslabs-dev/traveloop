@@ -3,11 +3,26 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getSiteUrl, getStripe, isPaymentsBypassEnabled, siteIsPubliclyReachable } from "@/lib/stripe";
 import { PASS_CURRENCY, getPassTier } from "@/app/data/passes";
-import { fulfillPassOrder, type PassOrder, type PassOrderItem } from "@/lib/fulfillment";
+import {
+  NO_DISCOUNT,
+  discountToMetadata,
+  fulfillPassOrder,
+  type OrderDiscount,
+  type PassOrder,
+  type PassOrderItem,
+} from "@/lib/fulfillment";
+import { findRedeemableCode, getActiveAutomaticDiscount } from "@/lib/discounts-db";
+import {
+  automaticDiscountCents,
+  describeDiscount,
+  quoteCart,
+  type CartQuote,
+  type DiscountRule,
+} from "@/lib/pricing";
 import { parseRegistration } from "@/lib/registration";
 import { actionLocale } from "@/i18n/server";
 import { getDictionary, type Dictionary } from "@/i18n/dictionaries";
-import { registrationErrorMessage } from "@/i18n/errors";
+import { discountErrorMessage, registrationErrorMessage } from "@/i18n/errors";
 import { fill } from "@/i18n/interpolate";
 import { insertCheckoutDraft, type DraftItem } from "@/lib/checkout-drafts-db";
 
@@ -33,9 +48,14 @@ async function fail(
 
 /**
  * Creates a Stripe Checkout Session for a cart of one or more passes and
- * returns its hosted-page URL. The browser sends only tier keys — prices are
- * looked up server-side, so a tampered request can't change what gets
- * charged. Tiers can be mixed in one cart (e.g. 2 Gold + 3 Silver).
+ * returns its hosted-page URL. The browser sends only tier keys and, if the
+ * buyer entered one, a discount code — prices and discounts are worked out
+ * here, so a tampered request can't change what gets charged. Tiers can be
+ * mixed in one cart (e.g. 2 Gold + 3 Silver).
+ *
+ * The automatic (launch) discount is baked into each pass's unit price; a
+ * code becomes a single-use Stripe coupon for exactly the amount it saves, so
+ * Stripe's page shows the same discount line the invoice will.
  *
  * Each pass needs its own tourist-registration/insurance details. Those are
  * too large (and too many, for a big cart) to fit in Stripe's metadata, so
@@ -54,13 +74,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Expected a JSON body." }, { status: 400 });
   }
 
-  const { items: rawItems } = (body ?? {}) as { items?: unknown };
+  const { items: rawItems, discountCode } = (body ?? {}) as {
+    items?: unknown;
+    discountCode?: unknown;
+  };
 
   if (!Array.isArray(rawItems) || rawItems.length === 0) {
     return fail((t) => t.cartEmpty, 400);
   }
   if (rawItems.length > MAX_ITEMS) {
     return fail((t) => fill(t.tooManyPasses, { max: MAX_ITEMS }), 400);
+  }
+
+  let automatic: DiscountRule | null;
+  let code: DiscountRule | null = null;
+  try {
+    automatic = await getActiveAutomaticDiscount();
+    if (typeof discountCode === "string" && discountCode.trim()) {
+      const lookup = await findRedeemableCode(discountCode);
+      if (!lookup.ok) {
+        return fail((t) => discountErrorMessage(lookup.reason, t), 400);
+      }
+      code = lookup.rule;
+    }
+  } catch (error) {
+    console.error("[checkout] Couldn't load discounts:", error);
+    return fail((t) => t.checkoutFailed, 500);
   }
 
   const items: DraftItem[] = [];
@@ -80,10 +119,19 @@ export async function POST(request: Request) {
     items.push({
       passKey: tier.key,
       passName: tier.name,
-      unitAmountCents: tier.priceCents,
+      listAmountCents: tier.listPriceCents,
+      unitAmountCents:
+        tier.listPriceCents - automaticDiscountCents(tier.listPriceCents, automatic),
       registration: parsed.value,
     });
   }
+
+  const quote = quoteCart(
+    items.map((item) => item.listAmountCents ?? item.unitAmountCents),
+    automatic,
+    code
+  );
+  const discount = orderDiscount(quote, automatic, code);
 
   const siteUrl = getSiteUrl();
 
@@ -97,12 +145,13 @@ export async function POST(request: Request) {
       sessionId: `cs_bypass_${randomUUID()}`,
       draftId: null,
       items,
-      amountTotal: items.reduce((sum, item) => sum + item.unitAmountCents, 0),
+      amountTotal: quote.totalCents,
       currency: PASS_CURRENCY,
       customerEmail: process.env.PAYMENTS_TEST_EMAIL ?? "test@example.com",
       customerName: items[0].registration.fullName,
       customerPhone: null,
       paymentIntentId: null,
+      discount,
     };
 
     try {
@@ -124,14 +173,30 @@ export async function POST(request: Request) {
     const draftId = await insertCheckoutDraft(items);
 
     const lineItems = buildLineItems(items, siteUrl);
+    const stripe = getStripe();
 
-    const session = await getStripe().checkout.sessions.create({
+    // One coupon per checkout, for exactly this order's saving: the code's
+    // rules (percent of the order, fixed once per order, the minimum-charge
+    // floor) are ours, so Stripe is only ever told the resulting amount.
+    const coupon =
+      discount.codeCents > 0
+        ? await stripe.coupons.create({
+            amount_off: discount.codeCents,
+            currency: PASS_CURRENCY,
+            duration: "once",
+            max_redemptions: 1,
+            name: (discount.codeLabel ?? "Discount").slice(0, 40),
+          })
+        : null;
+
+    const session = await stripe.checkout.sessions.create({
       mode: "payment",
       submit_type: "pay",
       locale: "auto",
       line_items: lineItems,
+      ...(coupon ? { discounts: [{ coupon: coupon.id }] } : {}),
       // Carried through to the webhook, which is where fulfilment happens.
-      metadata: { draftId },
+      metadata: { draftId, ...discountToMetadata(discount) },
       payment_intent_data: {
         metadata: { draftId },
         description: describeCart(items),
@@ -160,6 +225,30 @@ export async function POST(request: Request) {
       isConfigError ? 503 : 500
     );
   }
+}
+
+/** The discount as recorded on the order: worded now, so later edits don't rewrite past invoices. */
+function orderDiscount(
+  quote: CartQuote,
+  automatic: DiscountRule | null,
+  code: DiscountRule | null
+): OrderDiscount {
+  const discount = { ...NO_DISCOUNT };
+
+  if (automatic && quote.automaticDiscountCents > 0) {
+    discount.automaticLabel = `${automatic.label} (${describeDiscount(automatic)})`;
+    discount.automaticCents = quote.automaticDiscountCents;
+  }
+  // A code that saves nothing (the order is already at the minimum charge)
+  // isn't recorded as used.
+  if (code && quote.codeDiscountCents > 0) {
+    discount.codeId = code.id;
+    discount.code = code.code;
+    discount.codeLabel = `${code.code} (${describeDiscount(code)})`;
+    discount.codeCents = quote.codeDiscountCents;
+  }
+
+  return discount;
 }
 
 /** One Stripe line item per distinct tier in the cart, quantity = how many of that tier. */

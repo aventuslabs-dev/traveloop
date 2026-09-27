@@ -4,7 +4,8 @@ import Link from "@/i18n/Link";
 import { createClient } from "@/lib/supabase/server";
 import { getOrdersByUserId, type StoredOrder } from "@/lib/orders-db";
 import { getCustomerProfile } from "@/lib/customer-profile-db";
-import { getPassRegistrationsByUserId, type StoredPassRegistration } from "@/lib/pass-registrations-db";
+import { getPassRegistrationsByOrders, type StoredPassRegistration } from "@/lib/pass-registrations-db";
+import { formatPassNumber } from "@/lib/pass-number";
 import { getBookingsByUserId } from "@/lib/experience-bookings-db";
 import { accessForExperiences, isPastSession } from "@/lib/booking";
 import {
@@ -18,6 +19,7 @@ import {
 } from "@/app/data/experiences";
 import { localizedPassName } from "@/app/data/passes";
 import { Icon } from "@/app/components/Icons";
+import { CollectionCard, PassNumberList, type PassNumberEntry } from "@/app/components/PassCollection";
 import { profileCompleteness } from "@/app/[lang]/account/profile-summary";
 import { localePage, type LangParams } from "@/i18n/page";
 import { getDictionary, type Dictionary } from "@/i18n/dictionaries";
@@ -122,13 +124,17 @@ export default async function AccountPage({ params }: LangParams) {
     redirect(`/${lang}/account/login`);
   }
 
-  const [orders, profile, bookings, passRegistrations] = await Promise.all([
+  const [orders, profile, bookings] = await Promise.all([
     getOrdersByUserId(user.id),
     getCustomerProfile(user.id),
     getBookingsByUserId(user.id),
-    getPassRegistrationsByUserId(user.id),
   ]);
   const [currentPass, ...history] = orders;
+  // By order, not by user: an order linked to this account after purchase
+  // still has registrations stamped with no user (see getPassRegistrationsByOrders).
+  const passRegistrations = await getPassRegistrationsByOrders(
+    orders.map((order) => order.sessionId)
+  );
 
   const registrantsByOrder = new Map<string, StoredPassRegistration[]>();
   for (const reg of passRegistrations) {
@@ -141,6 +147,25 @@ export default async function AccountPage({ params }: LangParams) {
     const names = registrantsByOrder.get(order.sessionId)?.map((r) => r.fullName);
     return names && names.length > 0 ? names.join(", ") : null;
   }
+  function passNumbersFor(order: StoredOrder): PassNumberEntry[] {
+    return (registrantsByOrder.get(order.sessionId) ?? []).flatMap((reg) =>
+      reg.passNumber
+        ? [
+            {
+              passNumber: reg.passNumber,
+              traveller: reg.fullName,
+              passLabel: localizedPassName(reg.passKey, lang, reg.passName),
+              collectedOn: reg.collectedAt ? formatDate(reg.collectedAt, lang) : null,
+            },
+          ]
+        : []
+    );
+  }
+
+  const currentPasses = currentPass ? passNumbersFor(currentPass) : [];
+  // The collection card stays until every pass on the order has been picked up.
+  const awaitingCollection =
+    currentPass && (currentPasses.length === 0 || currentPasses.some((pass) => !pass.collectedOn));
 
   const firstName = profile?.fullName?.trim().split(" ")[0];
   const completeness = profileCompleteness(profile, dict.account.profile.rows);
@@ -199,10 +224,19 @@ export default async function AccountPage({ params }: LangParams) {
               </div>
 
               <p className="account-pass-name">{passLabel(currentPass)}</p>
-              {registrantNames(currentPass) && (
-                <p className="account-pass-registrants">
-                  {fill(t.currentPass.registered, { names: registrantNames(currentPass)! })}
-                </p>
+              {currentPasses.length > 0 ? (
+                <PassNumberList
+                  passes={currentPasses}
+                  dict={dict.checkout.passNumbers}
+                  tone="card"
+                  showStatus
+                />
+              ) : (
+                registrantNames(currentPass) && (
+                  <p className="account-pass-registrants">
+                    {fill(t.currentPass.registered, { names: registrantNames(currentPass)! })}
+                  </p>
+                )
               )}
 
               <dl className="account-pass-facts">
@@ -230,6 +264,10 @@ export default async function AccountPage({ params }: LangParams) {
                 {t.currentPass.downloadInvoice}
               </a>
             </article>
+
+            {awaitingCollection && (
+              <CollectionCard dict={dict.checkout.collection} passCount={currentPass.quantity} />
+            )}
 
             <ul className="account-stats">
               {trip && (
@@ -338,6 +376,7 @@ export default async function AccountPage({ params }: LangParams) {
           <ul className="account-history">
             {history.map((order) => {
               const tripDates = formatTrip(order, lang);
+              const passNumbers = passNumbersFor(order);
 
               return (
                 <li key={order.sessionId} className="account-history-item">
@@ -354,6 +393,13 @@ export default async function AccountPage({ params }: LangParams) {
                     {registrantNames(order) && (
                       <p className="account-history-meta">
                         {fill(t.currentPass.registered, { names: registrantNames(order)! })}
+                      </p>
+                    )}
+                    {passNumbers.length > 0 && (
+                      <p className="account-history-meta is-mono">
+                        {fill(t.history.passNumbers, {
+                          numbers: passNumbers.map((p) => formatPassNumber(p.passNumber)).join(", "),
+                        })}
                       </p>
                     )}
                   </div>

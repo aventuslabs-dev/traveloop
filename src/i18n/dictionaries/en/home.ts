@@ -192,7 +192,11 @@ const home = {
     body2: "so all you have to do is enjoy",
     body3: ".",
     startingFrom: "Three tiers starting from",
-    launchDiscount: "Exclusive 50% launch discount applied!",
+    /** Worded for the live automatic discount — see launchBadge in data/passes.ts. */
+    launchDiscount: {
+      percent: "Exclusive {percent}% launch discount applied!",
+      amount: "Exclusive MYR {amount} off every pass — launch discount applied!",
+    },
     cta: "Purchase Pass",
   },
 

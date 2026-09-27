@@ -7,12 +7,21 @@ import { Icon } from "@/app/components/Icons";
 import { getStripe } from "@/lib/stripe";
 import { toPassOrder } from "@/lib/fulfillment";
 import { getOrderBySessionId } from "@/lib/orders-db";
+import { getPassRegistrationsByOrder } from "@/lib/pass-registrations-db";
+import { localizedPassName } from "@/app/data/passes";
+import {
+  CollectionCard,
+  PassNumberList,
+  type PassNumberEntry,
+} from "@/app/components/PassCollection";
 import { localePage, type LangParams } from "@/i18n/page";
 import { pageMetadata } from "@/i18n/metadata";
 import { fill } from "@/i18n/interpolate";
-import type enCheckout from "@/i18n/dictionaries/en/checkout";
+import type { Locale } from "@/i18n/config";
+import type { Dictionary } from "@/i18n/dictionaries";
 
-type SuccessDict = typeof enCheckout.success;
+type CheckoutDict = Dictionary["checkout"];
+type SuccessDict = CheckoutDict["success"];
 
 export async function generateMetadata({ params }: LangParams): Promise<Metadata> {
   return {
@@ -60,7 +69,8 @@ export default async function CheckoutSuccessPage({ params, searchParams }: Succ
   }
 
   const state = await loadOrder(sessionId);
-  const t = dict.checkout.success;
+  // Only a paid order has passes; a pending bank transfer doesn't yet.
+  const passes = state.kind === "paid" ? await loadPasses(sessionId, lang) : [];
 
   return (
     <>
@@ -68,9 +78,9 @@ export default async function CheckoutSuccessPage({ params, searchParams }: Succ
       <main>
         <section className="passes-section section-light checkout-result">
           {state.kind === "unavailable" ? (
-            <UnavailableState dict={t} />
+            <UnavailableState dict={dict.checkout.success} />
           ) : (
-            <ConfirmedState state={state} dict={t} />
+            <ConfirmedState state={state} passes={passes} dict={dict.checkout} />
           )}
         </section>
       </main>
@@ -118,8 +128,9 @@ async function loadOrder(sessionId: string): Promise<OrderState> {
     };
 
     // `paid` is the only state that means money has actually settled. FPX and
-    // other delayed methods sit at `unpaid` until the bank confirms.
-    return session.payment_status === "paid"
+    // other delayed methods sit at `unpaid` until the bank confirms. A
+    // `no_payment_required` order was made free by a code: nothing to settle.
+    return session.payment_status === "paid" || session.payment_status === "no_payment_required"
       ? { kind: "paid", order }
       : { kind: "processing", order };
   } catch (error) {
@@ -143,13 +154,42 @@ async function referenceFor(sessionId: string): Promise<string | null> {
   }
 }
 
+/**
+ * Each traveller's pass number, or none if fulfilment hasn't written them yet
+ * — Stripe can send the buyer here before its webhook arrives. Like
+ * referenceFor, a failure here must not take the confirmation down with it.
+ */
+async function loadPasses(sessionId: string, lang: Locale): Promise<PassNumberEntry[]> {
+  try {
+    const registrations = await getPassRegistrationsByOrder(sessionId);
+    return registrations.flatMap((reg) =>
+      reg.passNumber
+        ? [
+            {
+              passNumber: reg.passNumber,
+              traveller: reg.fullName,
+              passLabel: localizedPassName(reg.passKey, lang, reg.passName),
+              collectedOn: null,
+            },
+          ]
+        : []
+    );
+  } catch (error) {
+    console.error("[checkout-success] Could not read the pass numbers:", error);
+    return [];
+  }
+}
+
 function ConfirmedState({
   state,
-  dict,
+  passes,
+  dict: checkoutDict,
 }: {
   state: Extract<OrderState, { kind: "paid" | "processing" }>;
-  dict: SuccessDict;
+  passes: PassNumberEntry[];
+  dict: CheckoutDict;
 }) {
+  const dict = checkoutDict.success;
   const { order } = state;
   const isPaid = state.kind === "paid";
 
@@ -185,6 +225,23 @@ function ConfirmedState({
           ? fill(dict.paidLede, { pass: passLabel, email: emailSuffix })
           : fill(dict.processingLede, { email: emailSuffix })}
       </p>
+
+      {isPaid &&
+        (passes.length > 0 ? (
+          <>
+            <PassNumberList passes={passes} dict={checkoutDict.passNumbers} />
+            <p className="pass-numbers-hint">{checkoutDict.passNumbers.hint}</p>
+          </>
+        ) : (
+          <p className="pass-numbers-pending">
+            <Icon name="clock" />
+            {checkoutDict.passNumbers.pending}
+          </p>
+        ))}
+
+      {isPaid && (
+        <CollectionCard dict={checkoutDict.collection} passCount={order.quantity} />
+      )}
 
       <dl className="checkout-summary">
         <div>

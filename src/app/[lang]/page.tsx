@@ -1,5 +1,6 @@
 import { getPartners } from "@/app/data/partners";
-import { getPassTiers } from "@/app/data/passes";
+import { getPassTiers, launchBadge } from "@/app/data/passes";
+import { getActiveAutomaticDiscount } from "@/lib/discounts-db";
 import { localePage, type LangParams } from "@/i18n/page";
 import { pageMetadata } from "@/i18n/metadata";
 import JsonLd from "@/app/components/JsonLd";
@@ -12,8 +13,16 @@ export async function generateMetadata({ params }: LangParams) {
   return { ...meta, title: { absolute: (await localePage(params)).dict.home.meta.title } };
 }
 
+/**
+ * Prices carry the live automatic discount. Editing it in /admin/discounts
+ * revalidates this page straight away; the timer catches a discount's own
+ * start or end date passing, which nothing announces.
+ */
+export const revalidate = 300;
+
 export default async function Page({ params }: LangParams) {
   const { lang, dict } = await localePage(params);
+  const automatic = await getActiveAutomaticDiscount();
 
   return (
     <>
@@ -29,7 +38,8 @@ export default async function Page({ params }: LangParams) {
         nav={dict.common.nav}
         language={dict.common.language}
         footer={dict.common.footer}
-        tiers={getPassTiers(lang)}
+        tiers={getPassTiers(lang, automatic)}
+        launchBadge={launchBadge(automatic, dict.home.what.launchDiscount)}
         partners={await getPartners(lang)}
       />
     </>

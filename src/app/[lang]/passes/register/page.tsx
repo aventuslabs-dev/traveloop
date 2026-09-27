@@ -3,6 +3,7 @@ import Link from "@/i18n/Link";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import { getPassTier, getPassTiers } from "@/app/data/passes";
+import { getActiveAutomaticDiscount } from "@/lib/discounts-db";
 import { localePage, type LangParams } from "@/i18n/page";
 import { pageMetadata } from "@/i18n/metadata";
 import RegistrationForm from "./RegistrationForm";
@@ -25,6 +26,7 @@ export default async function RegisterPage({ params, searchParams }: RegisterPag
   // the cart step itself lets the buyer add any tier, one or many.
   const seedTier = getPassTier(typeof pass === "string" ? pass : undefined);
   const t = dict.checkout.register;
+  const automatic = await getActiveAutomaticDiscount();
 
   return (
     <>
@@ -41,7 +43,8 @@ export default async function RegisterPage({ params, searchParams }: RegisterPag
           </aside>
 
           <RegistrationForm
-            passTiers={getPassTiers(lang)}
+            passTiers={getPassTiers(lang, automatic)}
+            automaticDiscount={automatic}
             seedPassKey={seedTier?.key}
             dict={dict.registration}
             insurance={dict.insurance}

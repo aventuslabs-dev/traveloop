@@ -52,8 +52,10 @@ export async function POST(request: Request) {
       case "checkout.session.completed": {
         const session = event.data.object;
         // Delayed-notification methods arrive here still unpaid; those are
-        // fulfilled by async_payment_succeeded instead.
-        if (session.payment_status === "paid") {
+        // fulfilled by async_payment_succeeded instead. An order a discount
+        // code made free completes as `no_payment_required` — nothing is owed,
+        // so it is as settled as a paid one.
+        if (session.payment_status === "paid" || session.payment_status === "no_payment_required") {
           await fulfillCompletedSession(session.id);
         } else {
           console.info(

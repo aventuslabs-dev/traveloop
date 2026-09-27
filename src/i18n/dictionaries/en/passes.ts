@@ -31,7 +31,11 @@ const passes = {
     viewLabel: "Pricing view",
     cardView: "Card view",
     tableView: "Compare perks",
-    launchDiscount: "Exclusive 50% launch discount applied!",
+    /** Worded for the live automatic discount — see launchBadge in data/passes.ts. */
+    launchDiscount: {
+      percent: "Exclusive {percent}% launch discount applied!",
+      amount: "Exclusive MYR {amount} off every pass — launch discount applied!",
+    },
     /** `{tier}` is the tier name, e.g. "Gold". */
     passName: "{tier} Pass",
     choose: "Choose {tier}",

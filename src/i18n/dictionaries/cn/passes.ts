@@ -27,7 +27,10 @@ const passes: typeof en = {
     viewLabel: "价格显示方式",
     cardView: "卡片视图",
     tableView: "权益对比",
-    launchDiscount: "已应用 5 折专属开卡优惠！",
+    launchDiscount: {
+      percent: "已应用 {zhe} 折专属开卡优惠！",
+      amount: "每张通行证立减 MYR {amount}，已应用专属开卡优惠！",
+    },
     passName: "{tier}通行证",
     choose: "选择{tier}",
     perkColumn: "权益",

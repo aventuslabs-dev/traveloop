@@ -29,7 +29,7 @@ const checkout: typeof en = {
     processingHeadingLead: "就快好了 ——",
     processingHeadingEm: "正在确认你的付款。",
 
-    paidLede: "你的{pass}已确认。我们已发送收据{email}，通行证详情随后将以电邮送达。",
+    paidLede: "你的{pass}已确认，收据正发送{email}。以下是抵达槟城后领取实体通行证的方式。",
     paidEmailSuffix: "至 {email}",
 
     processingLede:
@@ -58,6 +58,29 @@ const checkout: typeof en = {
       "若你已完成付款，请放心 —— 款项仍已成功处理，收据正以电邮送出。欢迎联系我们，我们会为你确认详情。",
     contactUs: "联系我们",
     backToPasses: "返回通行证页面",
+  },
+
+  passNumbers: {
+    heading: { one: "你的通行证号码", other: "你的通行证号码" },
+    hint: "在柜台出示此号码即可，无需打印。号码也已发送至你的电邮。",
+    pending: "你的通行证号码正在生成中，几分钟内将发送至你的确认电邮，并显示在会员中心。",
+    ready: "待领取",
+    collected: "已于 {date} 领取",
+  },
+
+  collection: {
+    eyebrow: "领取实体通行证",
+    place: "槟城国际机场",
+    area: "入境大厅",
+    directions: "走出入境大厅，黄色的机场德士服务柜台（Airport Taxi Services）就在你的正前方。",
+    hours: "每日开放，早上 7:00 至最后一班航班。",
+    stepsHeading: "在柜台",
+    steps: {
+      one: ["出示你的护照。", "提供你的通行证号码。"],
+      other: ["出示每位旅客的护照。", "提供每张通行证的号码。"],
+    },
+    map: "在 Google 地图中打开",
+    photoAlt: "槟城国际机场入境大厅外的黄色机场德士服务柜台",
   },
 };
 

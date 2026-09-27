@@ -8,11 +8,69 @@ import {
 import { sendOrderConfirmationEmail, sendAccountWelcomeEmail } from "./email";
 import { findOrCreateCustomerAccount, type CustomerAccountResult } from "./customer-account";
 import { upsertCustomerProfile } from "./customer-profile-db";
-import { getOrderItemsFromRegistrations, insertPassRegistrations } from "./pass-registrations-db";
+import {
+  getOrderItemsFromRegistrations,
+  insertPassRegistrations,
+  type IssuedPassItem,
+} from "./pass-registrations-db";
 import { getCheckoutDraft, deleteCheckoutDraft, type DraftItem } from "./checkout-drafts-db";
 import type { PassRegistration } from "./registration";
 
 export type PassOrderItem = DraftItem;
+
+/**
+ * What an order was discounted by, worded and computed at checkout. Stored
+ * with the order so its invoice reads the same after the discount itself is
+ * edited or deleted.
+ */
+export type OrderDiscount = {
+  /** "Launch discount (50% off)", or null when none applied. */
+  automaticLabel: string | null;
+  automaticCents: number;
+  codeId: number | null;
+  code: string | null;
+  /** "SUMMER10 (10% off)". */
+  codeLabel: string | null;
+  codeCents: number;
+};
+
+export const NO_DISCOUNT: OrderDiscount = {
+  automaticLabel: null,
+  automaticCents: 0,
+  codeId: null,
+  code: null,
+  codeLabel: null,
+  codeCents: 0,
+};
+
+/**
+ * The discount rides to the webhook in Stripe metadata (strings only, 500
+ * characters a value), next to the draft id. These two are the only readers
+ * and writers of those keys.
+ */
+export function discountToMetadata(discount: OrderDiscount): Record<string, string> {
+  return {
+    autoDiscountLabel: discount.automaticLabel ?? "",
+    autoDiscountCents: String(discount.automaticCents),
+    discountId: discount.codeId === null ? "" : String(discount.codeId),
+    discountCode: discount.code ?? "",
+    discountLabel: discount.codeLabel ?? "",
+    discountCents: String(discount.codeCents),
+  };
+}
+
+function discountFromMetadata(metadata: Stripe.Metadata | null): OrderDiscount {
+  if (!metadata) return NO_DISCOUNT;
+  const cents = (value: string | undefined) => Number.parseInt(value ?? "", 10) || 0;
+  return {
+    automaticLabel: metadata.autoDiscountLabel || null,
+    automaticCents: cents(metadata.autoDiscountCents),
+    codeId: metadata.discountId ? cents(metadata.discountId) : null,
+    code: metadata.discountCode || null,
+    codeLabel: metadata.discountLabel || null,
+    codeCents: cents(metadata.discountCents),
+  };
+}
 
 export type PassOrder = {
   /** Stripe Checkout Session id — the natural idempotency key for an order. */
@@ -28,6 +86,7 @@ export type PassOrder = {
   customerName: string | null;
   customerPhone: string | null;
   paymentIntentId: string | null;
+  discount: OrderDiscount;
 };
 
 /** Pulls the fields we care about out of a completed Checkout Session, resolving its draft. */
@@ -51,6 +110,7 @@ export async function toPassOrder(session: Stripe.Checkout.Session): Promise<Pas
       typeof session.payment_intent === "string"
         ? session.payment_intent
         : (session.payment_intent?.id ?? null),
+    discount: discountFromMetadata(session.metadata),
   };
 }
 
@@ -67,7 +127,8 @@ function primaryRegistration(order: PassOrder): PassRegistration | null {
  * being gated on one flag:
  *
  *   - the order row, on `sessionId` (`insertOrderIfNew`);
- *   - the registration rows, written once with the order;
+ *   - the registration rows, written once with the order — the database
+ *     issues each one its pass number as it goes in;
  *   - the receipt, on `orders.confirmation_sent_at`.
  *
  * Splitting them matters because they fail independently. Recording the order
@@ -75,9 +136,6 @@ function primaryRegistration(order: PassOrder): PassRegistration | null {
  * order already there and returned, so the buyer never got their receipt and
  * nothing anywhere said so. Now the retry lands on a receipt that hasn't been
  * sent and sends it.
- *
- * TODO: issue the actual pass number / QR code the buyer redeems at partner
- * locations — right now buyers get a receipt + invoice but no redeemable pass.
  */
 export async function fulfillPassOrder(order: PassOrder): Promise<void> {
   const account = order.customerEmail
@@ -176,12 +234,7 @@ async function deliverReceipt(
   }
 
   try {
-    // A redelivery arrives with an empty cart once the draft has been
-    // deleted; the registrations hold the same items.
-    const items =
-      order.items.length > 0
-        ? order.items
-        : await getOrderItemsFromRegistrations(stored.sessionId);
+    const items = await receiptItems(order, stored.sessionId);
 
     if (account.isNew) {
       await sendAccountWelcomeEmail(stored, items, account.password);
@@ -205,4 +258,26 @@ async function deliverReceipt(
   }
 
   await markConfirmationSent(stored.sessionId);
+}
+
+/**
+ * The passes a receipt lists. The stored registrations come first: they are
+ * the only place the pass numbers exist, and the durable copy a redelivery
+ * (whose draft is already deleted) has to use anyway.
+ *
+ * The draft is the fallback, without numbers, for when the registrations
+ * couldn't be written or read back. A receipt missing its pass numbers beats
+ * no receipt, especially a welcome email carrying the only copy of a new
+ * account's password; the numbers still reach the buyer through the portal
+ * and an admin resend once the registrations are sorted out.
+ */
+async function receiptItems(order: PassOrder, sessionId: string): Promise<IssuedPassItem[]> {
+  try {
+    const issued = await getOrderItemsFromRegistrations(sessionId);
+    if (issued.length > 0) return issued;
+  } catch (error) {
+    console.error(`[fulfillment] Couldn't read back the passes for ${sessionId}:`, error);
+  }
+
+  return order.items.map((item) => ({ ...item, passNumber: null }));
 }

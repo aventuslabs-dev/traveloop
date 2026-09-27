@@ -92,6 +92,7 @@ const account = {
       heading: "购买记录",
       trip: "行程 {dates}",
       downloadInvoice: "下载发票 {number}",
+      passNumbers: "通行证号码 {numbers}",
     },
 
     manage: {

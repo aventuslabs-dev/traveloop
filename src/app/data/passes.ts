@@ -10,6 +10,8 @@ import {
 } from "./experiences";
 
 import type { Locale } from "@/i18n/config";
+import { automaticDiscountCents, formatCents, formatPercent, type DiscountRule } from "@/lib/pricing";
+import { fill } from "@/i18n/interpolate";
 import { phrases } from "./phrases";
 import {
   highlightCopyCn,
@@ -31,11 +33,15 @@ export type PassTier = {
   key: PassKey;
   name: string;
   /**
-   * Authoritative charge amount in the smallest currency unit (sen).
-   * This — never a value posted by the browser — is what Stripe is charged.
+   * Price before any discount, in sen. The authoritative starting point:
+   * checkout applies discounts to this server-side (src/lib/pricing.ts), never
+   * to a figure posted by the browser.
    */
+  listPriceCents: number;
+  /** What one pass costs after the automatic discount the tiers were built with. */
   priceCents: number;
-  originalPriceCents: number;
+  /** Whether an automatic discount brings `priceCents` below the list price. */
+  discounted: boolean;
   badge?: string;
   tagline: string;
   sub: string;
@@ -47,7 +53,10 @@ export type PassTier = {
 };
 
 /** Highlights may be null when a generated bullet doesn't apply; nulls are dropped. */
-type PassTierSeed = Omit<PassTier, "price" | "originalPrice" | "highlights"> & {
+type PassTierSeed = Omit<
+  PassTier,
+  "price" | "originalPrice" | "highlights" | "priceCents" | "discounted"
+> & {
   highlights: (string | null)[];
 };
 
@@ -217,15 +226,13 @@ function passTierSeeds(lang: Locale): PassTierSeed[] {
     {
       key: "silver",
       ...c.tier("silver"),
-      priceCents: 3990,
-      originalPriceCents: 7990,
+      listPriceCents: 7980,
       highlights: [c.highlight.retail, c.highlight.fnb, experienceHighlight("silver", lang)],
     },
     {
       key: "gold",
       ...c.tier("gold"),
-      priceCents: 6990,
-      originalPriceCents: 13990,
+      listPriceCents: 13980,
       highlights: [
         p.everythingIn(c.tier("silver").name),
         experienceHighlight("gold", lang),
@@ -236,8 +243,7 @@ function passTierSeeds(lang: Locale): PassTierSeed[] {
     {
       key: "platinum",
       ...c.tier("platinum"),
-      priceCents: 8990,
-      originalPriceCents: 17990,
+      listPriceCents: 17980,
       highlights: [
         p.everythingIn(c.tier("gold").name),
         experienceHighlight("platinum", lang),
@@ -248,24 +254,55 @@ function passTierSeeds(lang: Locale): PassTierSeed[] {
   ];
 }
 
-/** Every tier, priced and worded for one locale. */
-export function getPassTiers(lang: Locale): PassTier[] {
-  return passTierSeeds(lang).map((tier) => ({
-    ...tier,
-    highlights: tier.highlights.filter((h): h is string => h !== null),
-    price: formatMinorUnits(tier.priceCents),
-    originalPrice: formatMinorUnits(tier.originalPriceCents),
-  }));
+/**
+ * Every tier, priced and worded for one locale.
+ *
+ * `automatic` is the live automatic discount (getActiveAutomaticDiscount),
+ * passed in rather than looked up so this stays usable from anywhere; without
+ * one, every tier is at its list price.
+ */
+export function getPassTiers(lang: Locale, automatic: DiscountRule | null = null): PassTier[] {
+  return passTierSeeds(lang).map((tier) => {
+    const priceCents = tier.listPriceCents - automaticDiscountCents(tier.listPriceCents, automatic);
+    return {
+      ...tier,
+      priceCents,
+      discounted: priceCents < tier.listPriceCents,
+      highlights: tier.highlights.filter((h): h is string => h !== null),
+      price: formatMinorUnits(priceCents),
+      originalPrice: formatMinorUnits(tier.listPriceCents),
+    };
+  });
 }
 
 /**
- * The English tiers.
+ * The English tiers at list price.
  *
  * Kept as a plain export because this is what the checkout route and every
  * server-side price check read — those must not depend on what language a
- * browser happened to be showing.
+ * browser happened to be showing. Discounts are applied on top by
+ * src/lib/pricing.ts.
  */
 export const passTiers: PassTier[] = getPassTiers("en");
+
+/**
+ * The "50% launch discount applied!" badge, worded for the live automatic
+ * discount, or null when there isn't one. `{percent}` is "50", `{zhe}` the
+ * Chinese 折 figure ("5"), `{amount}` a per-pass MYR amount ("10.00").
+ */
+export function launchBadge(
+  automatic: DiscountRule | null,
+  templates: { percent: string; amount: string }
+): string | null {
+  if (!automatic) return null;
+  if (automatic.kind === "percent") {
+    return fill(templates.percent, {
+      percent: formatPercent(automatic.value),
+      zhe: formatPercent((100 - automatic.value) / 10),
+    });
+  }
+  return fill(templates.amount, { amount: formatCents(automatic.value) });
+}
 
 /** Narrows an untrusted value (request body, query string) to a real tier key. */
 export function isPassKey(value: unknown): value is PassKey {

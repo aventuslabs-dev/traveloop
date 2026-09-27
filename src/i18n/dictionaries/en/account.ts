@@ -124,6 +124,8 @@ const account = {
       trip: "Trip {dates}",
       /** `{number}` is the invoice number. */
       downloadInvoice: "Download invoice {number}",
+      /** `{numbers}` is a comma-separated list of the order's pass numbers. */
+      passNumbers: "Pass No. {numbers}",
     },
 
     manage: {

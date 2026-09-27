@@ -42,6 +42,12 @@ type OrderRow = {
   departure_date: string | null;
   confirmation_sent_at: string | null;
   confirmation_error: string | null;
+  automatic_discount_label?: string | null;
+  automatic_discount_cents?: number | null;
+  discount_id?: number | null;
+  discount_code?: string | null;
+  discount_label?: string | null;
+  discount_cents?: number | null;
 };
 
 function toStoredOrder(row: OrderRow): StoredOrder {
@@ -66,6 +72,14 @@ function toStoredOrder(row: OrderRow): StoredOrder {
     // an undefined here would read as "receipt already sent" downstream.
     confirmationSentAt: row.confirmation_sent_at ?? null,
     confirmationError: row.confirmation_error ?? null,
+    discount: {
+      automaticLabel: row.automatic_discount_label ?? null,
+      automaticCents: row.automatic_discount_cents ?? 0,
+      codeId: row.discount_id ?? null,
+      code: row.discount_code ?? null,
+      codeLabel: row.discount_label ?? null,
+      codeCents: row.discount_cents ?? 0,
+    },
   };
 }
 
@@ -124,6 +138,12 @@ export async function insertOrderIfNew(
       // Earliest arrival / latest departure across all passes in the order.
       arrival_date: arrivalDates[0] ?? null,
       departure_date: departureDates[departureDates.length - 1] ?? null,
+      automatic_discount_label: order.discount.automaticLabel,
+      automatic_discount_cents: order.discount.automaticCents,
+      discount_id: order.discount.codeId,
+      discount_code: order.discount.code,
+      discount_label: order.discount.codeLabel,
+      discount_cents: order.discount.codeCents,
     })
     .select()
     .single<OrderRow>();

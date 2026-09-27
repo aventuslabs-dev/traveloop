@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getOrderBySessionId } from "@/lib/orders-db";
 import { getPassRegistrationsByOrder } from "@/lib/pass-registrations-db";
 import { isAdminUser } from "@/lib/admin-auth";
+import { formatPassNumber } from "@/lib/pass-number";
 import {
   EmptyState,
   Flash,
@@ -103,6 +105,33 @@ export default async function AdminOrderDetailPage({ params, searchParams }: Ord
             <dt>Total</dt>
             <dd>{money(order.amountTotal, order.currency)}</dd>
           </div>
+          {(order.discount.automaticCents > 0 || order.discount.codeCents > 0) && (
+            <div>
+              <dt>Discounts</dt>
+              <dd>
+                <span className="ad-cell-stack">
+                  {order.discount.automaticCents > 0 && (
+                    <span>
+                      {order.discount.automaticLabel ?? "Automatic"} −
+                      {money(order.discount.automaticCents, order.currency)}
+                    </span>
+                  )}
+                  {order.discount.codeCents > 0 && (
+                    <span>
+                      {order.discount.codeId ? (
+                        <Link className="ad-link" href={`/admin/discounts/${order.discount.codeId}`}>
+                          {order.discount.codeLabel ?? order.discount.code}
+                        </Link>
+                      ) : (
+                        (order.discount.codeLabel ?? order.discount.code)
+                      )}{" "}
+                      −{money(order.discount.codeCents, order.currency)}
+                    </span>
+                  )}
+                </span>
+              </dd>
+            </div>
+          )}
           <div>
             <dt>Customer</dt>
             <dd>{order.customerName ?? "—"}</dd>
@@ -172,6 +201,7 @@ export default async function AdminOrderDetailPage({ params, searchParams }: Ord
               <thead>
                 <tr>
                   <th>#</th>
+                  <th>Pass No.</th>
                   <th>Pass</th>
                   <th>Traveller</th>
                   <th>Nationality</th>
@@ -179,12 +209,22 @@ export default async function AdminOrderDetailPage({ params, searchParams }: Ord
                   <th>Arrival</th>
                   <th>Departure</th>
                   <th>Emergency contact</th>
+                  <th>Collection</th>
                 </tr>
               </thead>
               <tbody>
                 {registrations.map((reg, index) => (
                   <tr key={reg.id}>
                     <td className="is-mono">{index + 1}</td>
+                    <td className="is-mono">
+                      {reg.passNumber ? (
+                        <Link className="ad-link" href={`/admin/passes/${reg.passNumber}`}>
+                          {formatPassNumber(reg.passNumber)}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td>
                       <Tier name={reg.passName} />
                     </td>
@@ -209,6 +249,16 @@ export default async function AdminOrderDetailPage({ params, searchParams }: Ord
                         </span>
                       ) : (
                         "—"
+                      )}
+                    </td>
+                    <td>
+                      {reg.collectedAt ? (
+                        <span className="ad-cell-stack">
+                          <Pill label="Collected" tone="success" />
+                          <span>{formatDay(reg.collectedAt)}</span>
+                        </span>
+                      ) : (
+                        <Pill label="Awaiting" tone="warn" />
                       )}
                     </td>
                   </tr>

@@ -1159,6 +1159,87 @@ a.contact-card:hover { transform:translateY(-3px); box-shadow:0 18px 40px rgba(8
   .checkout-result-actions .button { width:100%; }
 }
 
+/* ---- Discount code + price breakdown (register cart) ---- */
+.cart-tier-row-price s { margin-right:8px; color:var(--muted); font-weight:400; text-decoration-color:var(--red); }
+.cart-code { margin-top:22px; }
+.cart-code-field { display:block; }
+.cart-code-field > span:first-child { display:block; margin-bottom:6px; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+.cart-code-row { display:flex; gap:10px; }
+.cart-code-row input { flex:1; min-width:0; height:46px; border:1px solid var(--line); border-radius:12px; padding:0 14px; font-family:inherit; font-size:14px; letter-spacing:.04em; text-transform:uppercase; background:#fff; color:var(--ink); }
+.cart-code-row input::placeholder { text-transform:none; letter-spacing:0; }
+.cart-code-row input:focus { outline:2px solid var(--blue); outline-offset:1px; }
+.cart-code-row input[aria-invalid="true"] { border-color:var(--red); }
+.cart-code-row .button { flex:none; }
+.cart-code-applied { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0; padding:12px 14px; border-radius:12px; background:rgba(13,107,72,.08); color:#0d6b48; font-size:13.5px; font-weight:700; }
+.cart-code-remove { margin-left:8px; padding:0; border:0; background:none; font:inherit; font-size:12.5px; font-weight:600; color:var(--muted); text-decoration:underline; cursor:pointer; }
+.cart-code-remove:hover { color:var(--red); }
+.cart-code-error { margin:8px 0 0; font-size:13px; color:var(--red); }
+.cart-summary { margin-top:18px; }
+.cart-summary .cart-total { margin-top:0; }
+.cart-summary-lines { margin:0 0 10px; display:grid; gap:6px; font-size:14px; }
+.cart-summary-lines > div { display:flex; justify-content:space-between; gap:16px; }
+.cart-summary-lines dt { color:var(--muted); }
+.cart-summary-lines dd { margin:0; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.cart-summary-lines .is-saving dt, .cart-summary-lines .is-saving dd { color:#0d6b48; }
+
+/* ---- Pass numbers & collection point (success page + customer portal) ---- */
+.pass-numbers { margin:32px 0 0; text-align:left; }
+.pass-numbers-label { margin:0 0 10px; font-size:10.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+.pass-numbers ul { list-style:none; margin:0; padding:0; border:1px solid var(--line); border-radius:18px; overflow:hidden; }
+.pass-numbers li { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:15px 18px; background:#fff; }
+.pass-numbers li + li { border-top:1px solid var(--line); }
+.pass-numbers-who { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.pass-numbers-who b { font-size:14.5px; font-weight:700; overflow-wrap:anywhere; }
+.pass-numbers-who span { font-size:12.5px; color:var(--muted); }
+.pass-numbers-right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex:none; }
+/* user-select:all so one tap selects the whole number for copying. */
+.pass-numbers-code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:clamp(15px,2.2vw,18px); font-weight:700; letter-spacing:.06em; color:var(--blue); white-space:nowrap; user-select:all; }
+.pass-numbers-status { font-size:11px; font-weight:700; letter-spacing:.03em; padding:3px 10px; border-radius:999px; background:rgba(215,41,54,.1); color:var(--red); }
+.pass-numbers-status.is-done { background:rgba(13,107,72,.12); color:#0d6b48; }
+.pass-numbers-hint { margin:10px 0 0; font-size:12.5px; color:var(--muted); text-align:left; }
+.pass-numbers-pending { display:flex; gap:10px; align-items:flex-start; margin:32px 0 0; padding:14px 16px; border-radius:14px; background:var(--cream); font-size:13.5px; line-height:1.6; text-align:left; }
+.pass-numbers-pending svg { flex:none; width:18px; height:18px; margin-top:2px; color:var(--red); }
+
+/* On the tier-coloured portal pass card the list inherits the card's ink, so
+   it reads on silver and gold (dark text) as well as platinum (light text). */
+.pass-numbers.on-card { margin:0 0 22px; }
+.pass-numbers.on-card .pass-numbers-label { color:inherit; opacity:.68; }
+.pass-numbers.on-card ul { border-color:color-mix(in srgb, currentColor 22%, transparent); }
+.pass-numbers.on-card li { background:color-mix(in srgb, currentColor 7%, transparent); }
+.pass-numbers.on-card li + li { border-top-color:color-mix(in srgb, currentColor 18%, transparent); }
+.pass-numbers.on-card .pass-numbers-who span { color:inherit; opacity:.72; }
+.pass-numbers.on-card .pass-numbers-code { color:inherit; }
+.pass-numbers.on-card .pass-numbers-status { background:#fff; }
+
+@media (max-width:520px) {
+  .pass-numbers li { flex-direction:column; align-items:flex-start; gap:8px; }
+  .pass-numbers-right { align-items:flex-start; }
+}
+
+.pass-collect-wrap { container-type:inline-size; margin-top:24px; text-align:left; }
+.pass-collect { display:grid; grid-template-columns:minmax(0,1fr); border:1px solid var(--line); border-radius:22px; overflow:hidden; background:#fff; color:var(--ink); box-shadow:0 14px 36px rgba(8,25,50,.06); }
+.pass-collect-photo img { display:block; width:100%; height:100%; max-height:250px; object-fit:cover; object-position:center 12%; }
+.pass-collect-body { padding:22px clamp(18px,3vw,26px) 24px; }
+.pass-collect-eyebrow { margin:0 0 8px; font-size:10.5px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--red); }
+.pass-collect h2 { margin:0 0 14px; font-family:var(--font-display),sans-serif; font-size:20px; letter-spacing:-.02em; line-height:1.25; }
+.pass-collect h2 span { display:block; margin-top:2px; font-size:14px; font-weight:600; letter-spacing:0; color:var(--muted); }
+.pass-collect-line { display:flex; gap:10px; margin:0 0 8px; font-size:13.5px; line-height:1.6; }
+.pass-collect-line svg { flex:none; width:17px; height:17px; margin-top:2px; color:var(--blue); }
+.pass-collect-steps-head { margin:18px 0 8px; font-size:10.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+.pass-collect-steps { list-style:none; margin:0 0 18px; padding:0; display:grid; gap:8px; }
+.pass-collect-steps li { display:flex; align-items:center; gap:10px; font-size:14px; font-weight:600; }
+.pass-collect-steps li span { display:inline-grid; place-items:center; flex:none; width:24px; height:24px; border-radius:50%; background:var(--red); color:#fff; font-size:12px; font-weight:700; }
+.pass-collect-map { display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:700; color:var(--red); }
+.pass-collect-map svg { width:15px; height:15px; transition:transform .2s ease; }
+.pass-collect-map:hover svg { transform:translateX(3px); }
+/* Photo beside the details once there's room (the portal); stacked in the
+   narrower success card. Sized by the container, not the viewport, because
+   the two hosts differ in width at the same screen size. */
+@container (min-width:620px) {
+  .pass-collect { grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr); }
+  .pass-collect-photo img { max-height:none; }
+}
+
 /* Used by the customer portal's invoice download; the admin console has its
    own .ad-icon-btn. */
 .admin-icon-button { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; flex:none; border-radius:9px; border:1px solid var(--line); color:var(--ink); transition:background .2s ease, border-color .2s ease, color .2s ease; }
@@ -1279,6 +1360,7 @@ a.contact-card:hover { transform:translateY(-3px); box-shadow:0 18px 40px rgba(8
 .account-history-main { flex:1; min-width:0; }
 .account-history-name { margin:0 0 3px; font-weight:700; font-size:14px; }
 .account-history-meta { margin:0; font-size:12.5px; color:var(--muted); }
+.account-history-meta.is-mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; }
 
 /* How much of the registration form is filled in. */
 .account-meter { margin:0 0 22px; padding-bottom:20px; border-bottom:1px solid var(--line); }
@@ -1987,6 +2069,38 @@ a.contact-card:hover { transform:translateY(-3px); box-shadow:0 18px 40px rgba(8
 .ad-dl dt { margin:0 0 4px; font-family:var(--ad-mono); font-size:10.5px; letter-spacing:.11em; text-transform:uppercase; color:var(--ad-muted); }
 .ad-dl dd { margin:0; font-size:13.5px; color:var(--ad-ink); word-break:break-word; }
 .ad-dl dd.is-mono { font-family:var(--ad-mono); font-size:12px; }
+.ad-link { color:var(--ad-primary); font-weight:600; }
+.ad-link:hover { text-decoration:underline; }
+
+/* ---------- pass hand-over ---------- */
+.ad-lookup { display:flex; gap:10px; flex-wrap:wrap; }
+.ad-lookup-input { max-width:420px; }
+.ad-lookup-input input { height:42px; font-family:var(--ad-mono); font-size:15px; letter-spacing:.06em; text-transform:uppercase; }
+.ad-lookup-input input::placeholder { text-transform:none; letter-spacing:0; font-family:var(--ad-font); }
+.admin-shell .ad-lookup .ad-btn { height:42px; }
+.ad-lookup-miss { margin-top:14px; }
+.ad-lookup-miss .ad-flash { margin-bottom:0; }
+/* What gets held against the passport: bigger than the console's usual density. */
+.ad-verify { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:18px 28px; margin:0; }
+.ad-verify dt { margin:0 0 5px; font-family:var(--ad-mono); font-size:10.5px; letter-spacing:.11em; text-transform:uppercase; color:var(--ad-muted); }
+.ad-verify dd { margin:0; font-family:var(--ad-display); font-size:20px; font-weight:600; letter-spacing:-.015em; color:var(--ad-ink); word-break:break-word; }
+.ad-verify dd.is-mono { font-family:var(--ad-mono); letter-spacing:.04em; }
+.admin-shell .ad-btn-lg { height:46px; padding:0 22px; font-size:14px; }
+
+/* ---------- discount form ---------- */
+.ad-choice { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin:0 0 18px; padding:0; border:0; }
+.ad-choice legend { margin-bottom:6px; padding:0; font-size:12px; font-weight:600; color:var(--ad-ink-2); }
+.ad-choice label, .ad-check { display:flex; gap:10px; align-items:flex-start; padding:11px 13px; border:1px solid var(--ad-line-2); border-radius:var(--ad-radius-sm); background:var(--ad-surface); cursor:pointer; }
+.ad-choice label:has(input:checked) { border-color:var(--ad-primary); background:var(--ad-primary-soft); }
+.ad-choice input, .ad-check input { margin-top:3px; accent-color:var(--ad-primary); }
+.ad-choice span, .ad-check span { display:flex; flex-direction:column; gap:2px; font-size:12.5px; line-height:1.5; color:var(--ad-muted); }
+.ad-choice b, .ad-check b { font-size:13.5px; font-weight:600; color:var(--ad-ink); }
+.ad-check { margin:4px 0 0; max-width:520px; }
+.admin-shell .admin-field input.is-code { font-family:var(--ad-mono); letter-spacing:.05em; text-transform:uppercase; }
+.admin-shell .admin-field input.is-code::placeholder { text-transform:none; letter-spacing:0; font-family:var(--ad-font); }
+.ad-form-foot { display:flex; gap:10px; margin-top:18px; padding-top:16px; border-top:1px solid var(--ad-line); }
+.ad-usage { margin:-10px 0 18px; }
+.ad-usage strong { color:var(--ad-ink); }
 
 /* ---------- one-time secret ---------- */
 .ad-secret {

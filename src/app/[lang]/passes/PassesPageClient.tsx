@@ -19,6 +19,7 @@ import type enPasses from "@/i18n/dictionaries/en/passes";
 
 export default function PassesPageClient({
   tiers,
+  launchBadge,
   comparison,
   dict,
   nav,
@@ -26,6 +27,8 @@ export default function PassesPageClient({
   footer,
 }: {
   tiers: PassTier[];
+  /** Null when no automatic discount is running — the cards then show list prices only. */
+  launchBadge: string | null;
   comparison: PassComparisonRow[];
   dict: typeof enPasses;
   nav: typeof enCommon.nav;
@@ -120,16 +123,18 @@ export default function PassesPageClient({
                   {tier.tagline} {tier.sub}
                 </p>
                 <div className="tier-price">
-                  <s className="tier-price-original">
-                    <small>MYR</small>
-                    {tier.originalPrice}
-                  </s>
+                  {tier.discounted && (
+                    <s className="tier-price-original">
+                      <small>MYR</small>
+                      {tier.originalPrice}
+                    </s>
+                  )}
                   <strong className="tier-price-current">
                     <small>MYR</small>
                     {tier.price}
                   </strong>
                 </div>
-                <span className="tier-discount-badge">{dict.pricing.launchDiscount}</span>
+                {launchBadge && <span className="tier-discount-badge">{launchBadge}</span>}
                 <ul className="tier-perks-list">
                   {tier.highlights.map((h) => (
                     <li key={h}>

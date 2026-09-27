@@ -1,8 +1,10 @@
 import { Resend } from "resend";
 import type { StoredOrder } from "./orders-db";
 import type { StoredBooking } from "./experience-bookings-db";
-import type { PassOrderItem } from "./fulfillment";
+import type { IssuedPassItem } from "./pass-registrations-db";
 import { buildInvoicePdf, invoiceLineItemsFor } from "./invoice";
+import { formatPassNumber } from "./pass-number";
+import { COLLECTION_POINT, collectionSteps } from "./pass-collection";
 import { formatDateLong, formatPrice, formatTimeRange } from "@/app/data/experiences";
 
 /** "Gold Pass" for a single-pass order, "3 passes" for a multi-pass one — matches the order summary. */
@@ -10,25 +12,66 @@ function passSummary(order: StoredOrder): string {
   return order.quantity > 1 ? order.passName : `${order.passName} Pass`;
 }
 
-/** One row per registrant — who each pass in the order belongs to. */
-function registrantsTable(items: PassOrderItem[]): string {
-  if (items.length <= 1) return "";
+/**
+ * One row per pass: who it's for and the number they collect it with. Shown
+ * for a single pass too — the number is the thing the buyer needs at the
+ * airport, so it gets the most prominent spot in the email.
+ */
+function passNumbersTable(items: IssuedPassItem[]): string {
+  if (items.length === 0) return "";
 
   const rows = items
     .map(
       (item) => `
         <tr>
-          <td style="padding: 8px 0; color: #6b6b6b; width: 45%;">${item.passName} Pass</td>
-          <td style="padding: 8px 0; font-weight: 600; text-align: right;">${item.registration.fullName}</td>
+          <td style="padding: 12px 0; border-top: 1px solid #eee;">
+            <div style="font-weight: 600;">${escapeHtml(item.registration.fullName)}</div>
+            <div style="font-size: 13px; color: #6b6b6b;">${item.passName} Pass</div>
+          </td>
+          <td style="padding: 12px 0; border-top: 1px solid #eee; text-align: right; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; ${
+            item.passNumber
+              ? `font-size: 16px; font-weight: 700; letter-spacing: .04em;">${formatPassNumber(item.passNumber)}`
+              : `font-size: 13px; color: #6b6b6b;">In your account shortly`
+          }</td>
         </tr>`
     )
     .join("");
 
   return `
-    <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
+    <p style="margin: 24px 0 4px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6b6b6b;">Your pass number${items.length > 1 ? "s" : ""}</p>
+    <table style="width: 100%; border-collapse: collapse; margin: 0 0 8px; font-size: 14px;">
       ${rows}
     </table>
   `;
+}
+
+/** Where and how to pick up the physical pass, with a photo of the counter so it's recognisable on arrival. */
+function collectionBlock(passCount: number): string {
+  const steps = collectionSteps(passCount)
+    .map((step) => `<li style="margin: 0 0 4px;">${step}</li>`)
+    .join("");
+
+  return `
+    <div style="margin: 24px 0; border: 1px solid #eee; border-radius: 12px; overflow: hidden;">
+      <img src="${siteUrl()}${COLLECTION_POINT.photo}" width="496" alt="${COLLECTION_POINT.photoAlt}" style="display: block; width: 100%; height: auto; border: 0;" />
+      <div style="padding: 18px 20px;">
+        <p style="margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #D72936;">Collect your physical pass</p>
+        <p style="margin: 0 0 6px; font-weight: 700;">${COLLECTION_POINT.place}</p>
+        <p style="margin: 0 0 4px; font-size: 14px; color: #3d3d3d;">${COLLECTION_POINT.directions}</p>
+        <p style="margin: 0 0 14px; font-size: 14px; color: #6b6b6b;">${COLLECTION_POINT.hours}</p>
+        <p style="margin: 0 0 6px; font-size: 14px; font-weight: 600;">At the counter:</p>
+        <ol style="margin: 0 0 14px; padding-left: 20px; font-size: 14px;">${steps}</ol>
+        <a href="${COLLECTION_POINT.mapsUrl}" style="font-size: 14px; font-weight: 700; color: #D72936;">Open in Google Maps &rarr;</a>
+      </div>
+    </div>
+  `;
+}
+
+/** " — you saved MYR 69.90" when the order had any discount, else nothing. */
+function savedNote(order: StoredOrder): string {
+  const saved = order.discount.automaticCents + order.discount.codeCents;
+  if (saved <= 0) return "";
+  return ` <span style="color: #0d6b48;">&mdash; you saved ${order.currency.toUpperCase()} ${(saved / 100).toFixed(2)}</span>`;
 }
 
 let cached: Resend | null = null;
@@ -41,7 +84,7 @@ function getResend(): Resend | null {
   return cached;
 }
 
-function confirmationHtml(order: StoredOrder, items: PassOrderItem[]): string {
+function confirmationHtml(order: StoredOrder, items: IssuedPassItem[]): string {
   const loginUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/account/login`;
 
   return `
@@ -52,8 +95,9 @@ function confirmationHtml(order: StoredOrder, items: PassOrderItem[]): string {
       </div>
       <div style="border: 1px solid #eee; border-top: none; padding: 28px 32px; border-radius: 0 0 16px 16px;">
         <p>Your Traveloop <strong>${passSummary(order)}</strong> ${order.quantity > 1 ? "are" : "is"} confirmed.</p>
-        ${registrantsTable(items)}
-        <p>Total paid: <strong>${order.currency.toUpperCase()} ${(order.amountTotal / 100).toFixed(2)}</strong></p>
+        ${passNumbersTable(items)}
+        ${collectionBlock(order.quantity)}
+        <p>Total paid: <strong>${order.currency.toUpperCase()} ${(order.amountTotal / 100).toFixed(2)}</strong>${savedNote(order)}</p>
         <p>Order reference: <code>${order.sessionId}</code><br/>Invoice: <code>${order.invoiceNumber}</code></p>
 
         <p style="margin-top: 28px;">You can view ${order.quantity > 1 ? "these passes" : "this pass"} and your full purchase history any time in your Traveloop account.</p>
@@ -68,7 +112,7 @@ function confirmationHtml(order: StoredOrder, items: PassOrderItem[]): string {
   `;
 }
 
-function accountWelcomeHtml(order: StoredOrder, items: PassOrderItem[], password: string): string {
+function accountWelcomeHtml(order: StoredOrder, items: IssuedPassItem[], password: string): string {
   const loginUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/account/login`;
   const firstName = order.customerName?.split(" ")[0] ?? "traveller";
 
@@ -80,8 +124,9 @@ function accountWelcomeHtml(order: StoredOrder, items: PassOrderItem[], password
       </div>
       <div style="border: 1px solid #eee; border-top: none; padding: 28px 32px; border-radius: 0 0 16px 16px;">
         <p>Your Traveloop <strong>${passSummary(order)}</strong> ${order.quantity > 1 ? "are" : "is"} confirmed.</p>
-        ${registrantsTable(items)}
-        <p>Total paid: <strong>${order.currency.toUpperCase()} ${(order.amountTotal / 100).toFixed(2)}</strong></p>
+        ${passNumbersTable(items)}
+        ${collectionBlock(order.quantity)}
+        <p>Total paid: <strong>${order.currency.toUpperCase()} ${(order.amountTotal / 100).toFixed(2)}</strong>${savedNote(order)}</p>
         <p>Order reference: <code>${order.sessionId}</code><br/>Invoice: <code>${order.invoiceNumber}</code></p>
 
         <p style="margin-top: 28px;">We've also set up a Traveloop account for you, so you can view your passes and purchase history any time:</p>
@@ -111,7 +156,7 @@ function accountWelcomeHtml(order: StoredOrder, items: PassOrderItem[], password
  * isn't set, so the checkout flow can be exercised end-to-end without an
  * email provider account.
  */
-export async function sendOrderConfirmationEmail(order: StoredOrder, items: PassOrderItem[]): Promise<void> {
+export async function sendOrderConfirmationEmail(order: StoredOrder, items: IssuedPassItem[]): Promise<void> {
   const resend = getResend();
 
   if (!resend) {
@@ -119,6 +164,7 @@ export async function sendOrderConfirmationEmail(order: StoredOrder, items: Pass
       to: order.customerEmail,
       subject: `Your Traveloop ${passSummary(order)} — ${order.invoiceNumber}`,
       invoiceNumber: order.invoiceNumber,
+      passNumbers: items.map((item) => item.passNumber),
     });
     return;
   }
@@ -161,7 +207,7 @@ export async function sendOrderConfirmationEmail(order: StoredOrder, items: Pass
  */
 export async function sendAccountWelcomeEmail(
   order: StoredOrder,
-  items: PassOrderItem[],
+  items: IssuedPassItem[],
   password: string
 ): Promise<void> {
   const resend = getResend();
@@ -171,6 +217,7 @@ export async function sendAccountWelcomeEmail(
       to: order.customerEmail,
       subject: `Welcome to Traveloop — your ${passSummary(order)} ${order.quantity > 1 ? "are" : "is"} confirmed`,
       invoiceNumber: order.invoiceNumber,
+      passNumbers: items.map((item) => item.passNumber),
       generatedPassword: password,
     });
     return;

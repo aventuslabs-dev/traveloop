@@ -25,6 +25,20 @@ const registration = {
     totalOne: "Total ({count} pass)",
     totalMany: "Total ({count} passes)",
     continue: "Continue to registration",
+
+    subtotal: "Subtotal",
+    /** `{percent}` is e.g. "50"; `{zhe}` is its Chinese 折 figure; `{amount}` a per-pass MYR amount. */
+    launchPercent: "Launch discount ({percent}% off)",
+    launchAmount: "Launch discount (MYR {amount} off each pass)",
+    codeLabel: "Discount code",
+    codePlaceholder: "Enter code",
+    apply: "Apply",
+    applying: "Checking…",
+    /** `{code}` is the code as entered. */
+    codeApplied: "Code {code}",
+    removeCode: "Remove",
+    /** Shown when a valid code saves nothing because the order is already at Stripe's minimum. */
+    codeNoEffect: "This code can't lower this order any further.",
   },
 
   details: {
@@ -94,6 +108,13 @@ const registration = {
     invalidDepartureDate: "Please provide a valid departure date.",
     dateOrder: "Your departure date must be on or after your arrival date.",
     termsNotAccepted: "Please accept the Terms & Conditions to continue.",
+
+    /** A discount code that can't be used right now. */
+    discountUnknown: "That discount code isn't valid. Check the spelling and try again.",
+    discountScheduled: "That discount code isn't active yet.",
+    discountEnded: "That discount code has expired.",
+    discountUsedUp: "That discount code has been fully redeemed.",
+    discountCheckFailed: "We couldn't check that code just now. Please try again.",
 
     /** Lower-case: these are dropped into the middle of the sentences above. */
     fieldNames: {

@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminUser } from "@/lib/admin-auth";
 import { getCustomerAccount, getDeletionImpact } from "@/lib/customer-accounts-db";
 import { getCustomerProfile } from "@/lib/customer-profile-db";
 import { getOrdersByUserId } from "@/lib/orders-db";
+import { getPassRegistrationsByOrders } from "@/lib/pass-registrations-db";
+import { formatPassNumber } from "@/lib/pass-number";
 import { getBookingsByUserId } from "@/lib/experience-bookings-db";
 import { formatDateLong, formatTimeRange } from "@/app/data/experiences";
 import { saveCustomer, deleteCustomer } from "@/app/[lang]/admin/user-actions";
@@ -13,6 +16,7 @@ import {
   Flash,
   PageHeader,
   Panel,
+  Pill,
   StatGrid,
   Tier,
   bookingTone,
@@ -63,6 +67,11 @@ export default async function AdminCustomerDetailPage({ params, searchParams }: 
     getBookingsByUserId(userId),
     getDeletionImpact(userId),
   ]);
+
+  // By this account's orders rather than the registration's own user_id,
+  // which goes stale when an order is re-linked (getPassRegistrationsByOrders).
+  const passes = await getPassRegistrationsByOrders(orders.map((order) => order.sessionId));
+  const invoiceFor = new Map(orders.map((order) => [order.sessionId, order.invoiceNumber]));
 
   const spend = orders.reduce((sum, order) => sum + order.amountTotal, 0);
   const currency = orders[0]?.currency ?? "myr";
@@ -149,6 +158,59 @@ export default async function AdminCustomerDetailPage({ params, searchParams }: 
                       <span className="ad-truncate" title={order.sessionId}>
                         {order.sessionId}
                       </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="Passes" icon="ticket" count={`${passes.length}`} padded={false}>
+        {passes.length === 0 ? (
+          <EmptyState icon="ticket" title="No passes">
+            Passes are issued per traveller when an order is paid.
+          </EmptyState>
+        ) : (
+          <div className="ad-table-scroll">
+            <table className="ad-table">
+              <thead>
+                <tr>
+                  <th>Pass No.</th>
+                  <th>Traveller</th>
+                  <th>Pass</th>
+                  <th>Invoice</th>
+                  <th>Collection</th>
+                </tr>
+              </thead>
+              <tbody>
+                {passes.map((pass) => (
+                  <tr key={pass.id}>
+                    <td className="is-mono">
+                      {pass.passNumber ? (
+                        <Link className="ad-link" href={`/admin/passes/${pass.passNumber}`}>
+                          {formatPassNumber(pass.passNumber)}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="is-strong">{pass.fullName}</td>
+                    <td>
+                      <Tier name={pass.passName} />
+                    </td>
+                    <td>
+                      <Link className="ad-link" href={`/admin/orders/${pass.orderSessionId}`}>
+                        {invoiceFor.get(pass.orderSessionId) || "View order"}
+                      </Link>
+                    </td>
+                    <td>
+                      {pass.collectedAt ? (
+                        <Pill label={`Collected ${formatDay(pass.collectedAt)}`} tone="success" />
+                      ) : (
+                        <Pill label="Awaiting" tone="warn" />
+                      )}
                     </td>
                   </tr>
                 ))}

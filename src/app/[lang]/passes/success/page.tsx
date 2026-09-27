@@ -5,8 +5,8 @@ import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import { Icon } from "@/app/components/Icons";
 import { getStripe } from "@/lib/stripe";
-import { toPassOrder } from "@/lib/fulfillment";
-import { getOrderBySessionId } from "@/lib/orders-db";
+import { toPassOrder, type PassOrder } from "@/lib/fulfillment";
+import { getOrderBySessionId, type StoredOrder } from "@/lib/orders-db";
 import { getPassRegistrationsByOrder } from "@/lib/pass-registrations-db";
 import { localizedPassName } from "@/app/data/passes";
 import {
@@ -94,38 +94,19 @@ async function loadOrder(sessionId: string): Promise<OrderState> {
   // in the checkout route, so the local order record is authoritative here.
   if (sessionId.startsWith("cs_bypass_")) {
     const stored = await getOrderBySessionId(sessionId);
-    return stored
-      ? {
-          kind: "paid",
-          order: {
-            sessionId: stored.sessionId,
-            reference: stored.invoiceNumber || null,
-            passName: stored.passName,
-            quantity: stored.quantity,
-            amountTotal: stored.amountTotal,
-            currency: stored.currency,
-            customerName: stored.customerName,
-            customerEmail: stored.customerEmail,
-          },
-        }
-      : { kind: "unavailable" };
+    return stored ? { kind: "paid", order: fromStoredOrder(stored) } : { kind: "unavailable" };
   }
 
   try {
     const session = await getStripe().checkout.sessions.retrieve(sessionId);
-    const passOrder = await toPassOrder(session);
 
-    const order: ReceiptOrder = {
-      sessionId: passOrder.sessionId,
-      reference: await referenceFor(sessionId),
-      passName:
-        passOrder.items.length === 1 ? passOrder.items[0].passName : `${passOrder.items.length} passes`,
-      quantity: passOrder.items.length,
-      amountTotal: passOrder.amountTotal,
-      currency: passOrder.currency,
-      customerName: passOrder.customerName,
-      customerEmail: passOrder.customerEmail,
-    };
+    // Once fulfilment has run, the stored order is the record — and the only
+    // one left: fulfilment deletes the checkout draft the cart was read from,
+    // so a buyer landing after the webhook (every free order does) would
+    // otherwise be shown an empty cart, "0 passes". The draft only speaks for
+    // an order the webhook hasn't reached yet.
+    const stored = await storedOrderFor(sessionId);
+    const order = stored ? fromStoredOrder(stored) : fromDraft(await toPassOrder(session));
 
     // `paid` is the only state that means money has actually settled. FPX and
     // other delayed methods sit at `unpaid` until the bank confirms. A
@@ -140,18 +121,45 @@ async function loadOrder(sessionId: string): Promise<OrderState> {
 }
 
 /**
- * The stored receipt number for a session, or null if fulfilment hasn't run
- * yet. Kept off the main path deliberately: a paid order should still render
- * its confirmation if this lookup fails, just without a reference to quote.
+ * The stored order for a session, or null if fulfilment hasn't run yet. A
+ * failed lookup also reads as null rather than failing the page: a paid order
+ * should still render its confirmation from Stripe and the draft.
  */
-async function referenceFor(sessionId: string): Promise<string | null> {
+async function storedOrderFor(sessionId: string): Promise<StoredOrder | null> {
   try {
-    const stored = await getOrderBySessionId(sessionId);
-    return stored?.invoiceNumber || null;
+    return await getOrderBySessionId(sessionId);
   } catch (error) {
-    console.error("[checkout-success] Could not read the order reference:", error);
+    console.error("[checkout-success] Could not read the stored order:", error);
     return null;
   }
+}
+
+function fromStoredOrder(stored: StoredOrder): ReceiptOrder {
+  return {
+    sessionId: stored.sessionId,
+    reference: stored.invoiceNumber || null,
+    passName: stored.passName,
+    quantity: stored.quantity,
+    amountTotal: stored.amountTotal,
+    currency: stored.currency,
+    customerName: stored.customerName,
+    customerEmail: stored.customerEmail,
+  };
+}
+
+/** Before fulfilment: the cart as the checkout draft still holds it. No receipt number exists yet. */
+function fromDraft(passOrder: PassOrder): ReceiptOrder {
+  return {
+    sessionId: passOrder.sessionId,
+    reference: null,
+    passName:
+      passOrder.items.length === 1 ? passOrder.items[0].passName : `${passOrder.items.length} passes`,
+    quantity: passOrder.items.length,
+    amountTotal: passOrder.amountTotal,
+    currency: passOrder.currency,
+    customerName: passOrder.customerName,
+    customerEmail: passOrder.customerEmail,
+  };
 }
 
 /**

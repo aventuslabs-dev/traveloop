@@ -1,19 +1,30 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { splitLocale, type Locale } from "@/i18n/config";
+import { isOperatorEmail } from "@/lib/admin-auth";
 
 /**
  * Urban Sprint pages anyone may see without signing in. The campaign leans on
- * its leaderboard being public, so the board and the landing page that
- * previews it are deliberately open. Listed without a locale prefix — they are
- * compared against the path after the prefix is stripped. The pulse endpoint
- * they poll lives under /api and never reaches this proxy at all.
+ * its leaderboard being public, so the landing page that carries it is
+ * deliberately open — and booking a team is how a stranger
+ * becomes a participant, so it can't sit behind a login either. Listed without
+ * a locale prefix — they are compared against the path after the prefix is
+ * stripped. The pulse endpoint they poll lives under /api and never reaches
+ * this proxy at all.
  */
 const URBAN_SPRINT_PUBLIC = [
   "/urban-sprint",
-  "/urban-sprint/leaderboard",
   "/urban-sprint/login",
+  "/urban-sprint/book",
+  "/urban-sprint/book/success",
 ];
+
+/**
+ * A booked team's private link pages. Racers don't sign in: the signed token
+ * in the path is what admits them, checked by the pages themselves
+ * (lib/urban-sprint/team-link.ts).
+ */
+const URBAN_SPRINT_TEAM_LINK = "/urban-sprint/t/";
 
 /**
  * Refreshes the Supabase auth cookie and gates /admin, /account and the
@@ -56,7 +67,7 @@ export async function updateSession(request: NextRequest, locale: Locale) {
 
   // Customers get their own Supabase Auth accounts too, so "is signed in" is
   // not "is the admin" — the admin session must belong to ADMIN_LOGIN_EMAIL.
-  const isAdmin = Boolean(user && user.email === process.env.ADMIN_LOGIN_EMAIL);
+  const isAdmin = isOperatorEmail(user?.email);
 
   const { pathname } = request.nextUrl;
   const { rest: path } = splitLocale(pathname);
@@ -83,7 +94,8 @@ export async function updateSession(request: NextRequest, locale: Locale) {
   // decided by requireRole() in the page or action that serves the data —
   // proxy is the optimistic check, not the authorisation.
   if (path.startsWith("/urban-sprint")) {
-    const isPublic = URBAN_SPRINT_PUBLIC.includes(path);
+    const isPublic =
+      URBAN_SPRINT_PUBLIC.includes(path) || path.startsWith(URBAN_SPRINT_TEAM_LINK);
 
     if (!user && !isPublic) {
       const loginUrl = request.nextUrl.clone();

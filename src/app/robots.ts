@@ -19,7 +19,7 @@ const privatePaths = [
   "/passes/success",
   "/urban-sprint/admin",
   "/urban-sprint/gamemaster",
-  "/urban-sprint/team",
+  "/urban-sprint/t/",
   "/urban-sprint/login",
 ];
 

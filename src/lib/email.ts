@@ -6,6 +6,15 @@ import { buildInvoicePdf, invoiceLineItemsFor } from "./invoice";
 import { formatPassNumber } from "./pass-number";
 import { COLLECTION_POINT, collectionSteps } from "./pass-collection";
 import { formatDateLong, formatPrice, formatTimeRange } from "@/app/data/experiences";
+import type { RaceDetails } from "./urban-sprint/race-details";
+import {
+  ARRIVAL_LEAD_MINUTES,
+  arrivalTime,
+  formatBookingDate,
+  formatSlotTime,
+} from "./urban-sprint/booking-config";
+import { parseLinkedText } from "./urban-sprint/linked-text";
+import { teamLinkPath } from "./urban-sprint/team-link";
 
 /** "Gold Pass" for a single-pass order, "3 passes" for a multi-pass one — matches the order summary. */
 function passSummary(order: StoredOrder): string {
@@ -84,17 +93,118 @@ function getResend(): Resend | null {
   return cached;
 }
 
-function confirmationHtml(order: StoredOrder, items: IssuedPassItem[]): string {
-  const loginUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/account/login`;
+/* ------------------------------------------------------------------ */
+/* Urban Sprint: the race part of a team's receipt                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Staff-edited wording as email HTML: escaped throughout, [label](/path) links
+ * made absolute (a mail client has no site to resolve "/terms" against), and
+ * line breaks kept.
+ */
+function linkedTextHtml(text: string): string {
+  return parseLinkedText(text)
+    .map((part) => {
+      if (!part.href) return escapeHtml(part.text);
+      const href = part.href.startsWith("/") ? `${siteUrl()}${part.href}` : part.href;
+      return `<a href="${escapeHtml(href)}" style="color: #244798;">${escapeHtml(part.text)}</a>`;
+    })
+    .join("")
+    .replace(/\n/g, "<br>");
+}
+
+/** The Booking ID, when to arrive and when the challenge starts — what the team needs on race day. */
+function raceBlock({ booking }: RaceDetails): string {
+  const details: [string, string][] = [
+    ["Booking ID", booking.reference],
+    ["Team name", escapeHtml(booking.teamName)],
+    ["Date", formatBookingDate(booking.date)],
+    ["Arrival time", formatSlotTime(arrivalTime(booking.time))],
+    ["Challenge time", formatSlotTime(booking.time)],
+    ["Team size", `${booking.teamSize} people`],
+  ];
 
   return `
-    <div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; max-width: 560px; margin: 0 auto;">
-      <div style="background: #D72936; padding: 28px 32px; border-radius: 16px 16px 0 0;">
-        <p style="margin: 0; color: rgba(255,255,255,.8); font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;">Traveloop</p>
-        <h1 style="margin: 8px 0 0; color: white; font-size: 22px;">Thanks for your purchase, ${order.customerName?.split(" ")[0] ?? "traveller"}!</h1>
-      </div>
-      <div style="border: 1px solid #eee; border-top: none; padding: 28px 32px; border-radius: 0 0 16px 16px;">
-        <p>Your Traveloop <strong>${passSummary(order)}</strong> ${order.quantity > 1 ? "are" : "is"} confirmed.</p>
+    <p style="margin: 16px 0; padding: 14px 16px; background: #F4EFE7; border-radius: 10px; font-size: 14px;">
+      Please arrive by <strong>${formatSlotTime(arrivalTime(booking.time))}</strong> — ${ARRIVAL_LEAD_MINUTES} minutes before your ${formatSlotTime(booking.time)} challenge — and quote Booking ID <strong>${booking.reference}</strong> at check-in.
+    </p>
+    <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
+      ${details
+        .map(
+          ([label, value]) => `
+        <tr>
+          <td style="padding: 8px 0; color: #6b6b6b; width: 45%;">${label}</td>
+          <td style="padding: 8px 0; font-weight: 600; text-align: right;">${value}</td>
+        </tr>`
+        )
+        .join("")}
+    </table>
+    <div style="margin: 20px 0; padding: 16px; border: 1px solid #E6DED2; border-radius: 10px;">
+      <p style="margin: 0 0 6px; font-size: 15px; font-weight: 700;">Your team page</p>
+      <p style="margin: 0 0 14px; font-size: 14px; color: #4a4a4a;">Send this link to everyone on the team — no sign-in needed. On race day it shows your booster, every station you clear and where you stand.</p>
+      <a href="${siteUrl()}${teamLinkPath(booking.reference)}" style="display: inline-block; background: #D72936; color: white; text-decoration: none; font-weight: 700; font-size: 14px; padding: 12px 24px; border-radius: 999px;">Open team page</a>
+    </div>
+  `;
+}
+
+/** The Rules & Regulations, as the console words them at sending. */
+function rulesBlock({ rulesText }: RaceDetails): string {
+  return `
+    <p style="margin: 28px 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6b6b6b;">Urban Sprint Rules &amp; Regulations</p>
+    <div style="font-size: 13px; line-height: 1.6; color: #333;">${linkedTextHtml(rulesText)}</div>
+  `;
+}
+
+/* ------------------------------------------------------------------ */
+/* Receipts                                                            */
+/* ------------------------------------------------------------------ */
+
+function firstName(order: StoredOrder): string {
+  return order.customerName?.split(" ")[0] ?? "traveller";
+}
+
+/**
+ * The top of a receipt: what was bought. A Premier Pass order leads with the
+ * passes; an Urban Sprint order leads with the race, then the Platinum Pass
+ * each racer got with it.
+ */
+function receiptIntro(order: StoredOrder, race: RaceDetails | null): string {
+  if (!race) {
+    return `<p>Your Traveloop <strong>${passSummary(order)}</strong> ${order.quantity > 1 ? "are" : "is"} confirmed.</p>`;
+  }
+
+  return `
+    <p>Thanks, ${escapeHtml(firstName(order))} — <strong>${escapeHtml(race.booking.teamName)}</strong> is booked for Urban Sprint.</p>
+    ${raceBlock(race)}
+    <p style="margin-top: 24px;">Your entry includes a Traveloop <strong>Platinum Pass</strong> for every racer, with its insurance cover. Each person collects theirs with the number below and the IC or passport they registered with.</p>
+  `;
+}
+
+function receiptHeading(order: StoredOrder, race: RaceDetails | null): string {
+  return race
+    ? `${escapeHtml(race.booking.teamName)} is in the race!`
+    : `Thanks for your purchase, ${escapeHtml(firstName(order))}!`;
+}
+
+function receiptSubject(order: StoredOrder, race: RaceDetails | null, welcome: boolean): string {
+  if (race) {
+    const when = `${formatBookingDate(race.booking.date)}, ${formatSlotTime(race.booking.time)}`;
+    return welcome
+      ? `Welcome to Traveloop — Urban Sprint booking ${race.booking.reference} confirmed`
+      : `Urban Sprint booking ${race.booking.reference} confirmed — ${race.booking.teamName}, ${when}`;
+  }
+  return welcome
+    ? `Welcome to Traveloop — your ${passSummary(order)} ${order.quantity > 1 ? "are" : "is"} confirmed`
+    : `Your Traveloop ${passSummary(order)} — ${order.invoiceNumber}`;
+}
+
+function confirmationHtml(order: StoredOrder, items: IssuedPassItem[], race: RaceDetails | null): string {
+  const loginUrl = `${siteUrl()}/account/login`;
+
+  return emailShell(
+    receiptHeading(order, race),
+    `
+        ${receiptIntro(order, race)}
         ${passNumbersTable(items)}
         ${collectionBlock(order.quantity)}
         <p>Total paid: <strong>${order.currency.toUpperCase()} ${(order.amountTotal / 100).toFixed(2)}</strong>${savedNote(order)}</p>
@@ -106,24 +216,24 @@ function confirmationHtml(order: StoredOrder, items: IssuedPassItem[]): string {
           <a href="${loginUrl}" style="display: inline-block; background: #D72936; color: white; text-decoration: none; font-weight: 700; font-size: 14px; padding: 14px 28px; border-radius: 999px;">Go to Customer Portal</a>
         </p>
 
-        <p style="font-size: 13px; color: #6b6b6b;">Your invoice is attached to this email. Quote your order reference if you contact us.</p>
-      </div>
-    </div>
-  `;
+        <p style="font-size: 13px; color: #6b6b6b;">Your invoice is attached to this email. Quote ${race ? `your Booking ID, ${race.booking.reference},` : "your order reference"} if you contact us.</p>
+        ${race ? rulesBlock(race) : ""}
+    `
+  );
 }
 
-function accountWelcomeHtml(order: StoredOrder, items: IssuedPassItem[], password: string): string {
-  const loginUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/account/login`;
-  const firstName = order.customerName?.split(" ")[0] ?? "traveller";
+function accountWelcomeHtml(
+  order: StoredOrder,
+  items: IssuedPassItem[],
+  password: string,
+  race: RaceDetails | null
+): string {
+  const loginUrl = `${siteUrl()}/account/login`;
 
-  return `
-    <div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; max-width: 560px; margin: 0 auto;">
-      <div style="background: #D72936; padding: 28px 32px; border-radius: 16px 16px 0 0;">
-        <p style="margin: 0; color: rgba(255,255,255,.8); font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;">Traveloop</p>
-        <h1 style="margin: 8px 0 0; color: white; font-size: 22px;">Thanks for your purchase, ${firstName}!</h1>
-      </div>
-      <div style="border: 1px solid #eee; border-top: none; padding: 28px 32px; border-radius: 0 0 16px 16px;">
-        <p>Your Traveloop <strong>${passSummary(order)}</strong> ${order.quantity > 1 ? "are" : "is"} confirmed.</p>
+  return emailShell(
+    receiptHeading(order, race),
+    `
+        ${receiptIntro(order, race)}
         ${passNumbersTable(items)}
         ${collectionBlock(order.quantity)}
         <p>Total paid: <strong>${order.currency.toUpperCase()} ${(order.amountTotal / 100).toFixed(2)}</strong>${savedNote(order)}</p>
@@ -142,27 +252,35 @@ function accountWelcomeHtml(order: StoredOrder, items: IssuedPassItem[], passwor
         </p>
 
         <p style="font-size: 13px; color: #6b6b6b;">For your security, we recommend changing this password after you sign in for the first time.</p>
-        <p style="font-size: 13px; color: #6b6b6b;">Your invoice is attached to this email. Quote your order reference if you contact us.</p>
-      </div>
-    </div>
-  `;
+        <p style="font-size: 13px; color: #6b6b6b;">Your invoice is attached to this email. Quote ${race ? `your Booking ID, ${race.booking.reference},` : "your order reference"} if you contact us.</p>
+        ${race ? rulesBlock(race) : ""}
+    `
+  );
 }
 
 /**
  * Sends the buyer their receipt + invoice. Throws if the send fails, or if
  * the invoice PDF can't be built — the caller decides what that means.
  *
+ * `race` is set for an Urban Sprint order: the same receipt then doubles as
+ * the team's booking confirmation, so a team gets one email, not two.
+ *
  * Falls back to logging the full email to the console when RESEND_API_KEY
  * isn't set, so the checkout flow can be exercised end-to-end without an
  * email provider account.
  */
-export async function sendOrderConfirmationEmail(order: StoredOrder, items: IssuedPassItem[]): Promise<void> {
+export async function sendOrderConfirmationEmail(
+  order: StoredOrder,
+  items: IssuedPassItem[],
+  race: RaceDetails | null = null
+): Promise<void> {
   const resend = getResend();
+  const subject = receiptSubject(order, race, false);
 
   if (!resend) {
     console.info("[email] RESEND_API_KEY not set — logging email instead of sending:", {
       to: order.customerEmail,
-      subject: `Your Traveloop ${passSummary(order)} — ${order.invoiceNumber}`,
+      subject,
       invoiceNumber: order.invoiceNumber,
       passNumbers: items.map((item) => item.passNumber),
     });
@@ -180,8 +298,8 @@ export async function sendOrderConfirmationEmail(order: StoredOrder, items: Issu
   const { error } = await resend.emails.send({
     from,
     to: order.customerEmail,
-    subject: `Your Traveloop ${passSummary(order)} — ${order.invoiceNumber}`,
-    html: confirmationHtml(order, items),
+    subject,
+    html: confirmationHtml(order, items, race),
     attachments: [
       {
         filename: `${order.invoiceNumber}.pdf`,
@@ -208,14 +326,16 @@ export async function sendOrderConfirmationEmail(order: StoredOrder, items: Issu
 export async function sendAccountWelcomeEmail(
   order: StoredOrder,
   items: IssuedPassItem[],
-  password: string
+  password: string,
+  race: RaceDetails | null = null
 ): Promise<void> {
   const resend = getResend();
+  const subject = receiptSubject(order, race, true);
 
   if (!resend) {
     console.info("[email] RESEND_API_KEY not set — logging welcome email instead of sending:", {
       to: order.customerEmail,
-      subject: `Welcome to Traveloop — your ${passSummary(order)} ${order.quantity > 1 ? "are" : "is"} confirmed`,
+      subject,
       invoiceNumber: order.invoiceNumber,
       passNumbers: items.map((item) => item.passNumber),
       generatedPassword: password,
@@ -234,8 +354,8 @@ export async function sendAccountWelcomeEmail(
   const { error } = await resend.emails.send({
     from,
     to: order.customerEmail,
-    subject: `Welcome to Traveloop — your ${passSummary(order)} ${order.quantity > 1 ? "are" : "is"} confirmed`,
-    html: accountWelcomeHtml(order, items, password),
+    subject,
+    html: accountWelcomeHtml(order, items, password, race),
     attachments: [
       {
         filename: `${order.invoiceNumber}.pdf`,

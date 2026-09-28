@@ -11,6 +11,11 @@ import {
 } from "@/lib/orders-db";
 import { getOrderItemsFromRegistrations } from "@/lib/pass-registrations-db";
 import { sendOrderConfirmationEmail } from "@/lib/email";
+import { raceDetailsFor } from "@/lib/urban-sprint/race-details";
+import {
+  markConfirmationSent as markBookingConfirmationSent,
+  recordConfirmationFailure as recordBookingConfirmationFailure,
+} from "@/lib/urban-sprint/bookings-db";
 
 /**
  * The admin area is gated by a Supabase session in proxy.ts, but Server Actions
@@ -50,11 +55,16 @@ export async function resendReceipt(formData: FormData) {
   }
 
   let failure: string | null = null;
+  let bookingId: number | null = null;
   try {
     // Rebuilt from the stored registrations — the checkout draft that carried
     // them at purchase time is long gone by now.
     const items = await getOrderItemsFromRegistrations(sessionId);
-    await sendOrderConfirmationEmail(order, items);
+    // An Urban Sprint order's receipt is also the team's booking
+    // confirmation, so it goes out with the race on it again.
+    const race = await raceDetailsFor(order);
+    bookingId = race?.booking.id ?? null;
+    await sendOrderConfirmationEmail(order, items, race);
   } catch (error) {
     console.error(`[admin] Failed to resend the receipt for ${sessionId}:`, error);
     failure = error instanceof Error ? error.message : String(error);
@@ -63,11 +73,14 @@ export async function resendReceipt(formData: FormData) {
   // redirect() works by throwing, so both branches stay outside the try above.
   if (failure) {
     await recordConfirmationFailure(sessionId, failure);
+    if (bookingId !== null) await recordBookingConfirmationFailure(bookingId, failure);
     revalidatePath(`/admin/orders/${sessionId}`);
     redirect(`/admin/orders/${sessionId}?error=send`);
   }
 
   await markConfirmationSent(sessionId);
+  // The Urban Sprint console reads the booking's own copy of this.
+  if (bookingId !== null) await markBookingConfirmationSent(bookingId);
   revalidatePath("/admin");
   revalidatePath(`/admin/orders/${sessionId}`);
   redirect(`/admin/orders/${sessionId}?sent=1`);

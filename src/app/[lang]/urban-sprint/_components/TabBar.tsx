@@ -15,10 +15,12 @@ export type Tab = {
    * meaning anything.
    */
   prominent?: boolean;
+  /** A section's home tab: lit only on its own page, not on every page beneath it. */
+  exact?: boolean;
 };
 
 /**
- * Bottom navigation for the gamemaster and participant views.
+ * Bottom navigation for the gamemaster's views and a team's link page.
  *
  * Bottom rather than top because these are one-handed, on-the-move screens —
  * the thumb reaches the bottom of a phone, not the top. It sits above the safe
@@ -31,13 +33,9 @@ export default function TabBar({ tabs }: { tabs: Tab[] }) {
   return (
     <nav className="us-tabbar" aria-label="Sections">
       {tabs.map((tab) => {
-        // Exact match for the section root; prefix for everything beneath it,
+        // Exact match for a section's home; prefix for everything beneath it,
         // so /gamemaster/stations doesn't also light up the dashboard tab.
-        const active =
-          pathname === tab.href ||
-          (tab.href !== "/urban-sprint/gamemaster" &&
-            tab.href !== "/urban-sprint/team" &&
-            pathname.startsWith(`${tab.href}/`));
+        const active = pathname === tab.href || (!tab.exact && pathname.startsWith(`${tab.href}/`));
 
         return (
           <Link

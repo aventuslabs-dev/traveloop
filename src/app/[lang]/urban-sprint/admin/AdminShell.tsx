@@ -1,28 +1,41 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/app/components/Icons";
+import ConsoleSwitch from "@/app/[lang]/admin/(dashboard)/ConsoleSwitch";
 
-export type AdminNavItem = { href: string; label: string; icon: string; count?: number };
+export type AdminNavItem = {
+  href: string;
+  label: string;
+  icon: string;
+  count?: number;
+  /** A count that means work is waiting, drawn in red rather than grey. */
+  alert?: boolean;
+};
+
+export type AdminNavGroup = { label: string; items: AdminNavItem[] };
 
 /**
- * The Urban Sprint console chrome: a fixed rail on desktop, a slide-over on
- * phones. It follows the shape of the Traveloop admin shell so an operator who
- * knows one knows the other, but it is a separate component in the Urban
- * Sprint tree — the two consoles are different products and shouldn't be
- * coupled through shared chrome.
+ * The Urban Sprint console chrome. It is the Traveloop admin shell's markup
+ * and classes (globals.css), so the two consoles look and behave as one
+ * product: a fixed rail on desktop, a slide-over below 1000px. The nav is
+ * grouped by job — running bookings, running the live game, setting up.
  */
 export default function AdminShell({
   children,
-  nav,
+  groups,
   operator,
+  canSwitch,
   signOut,
 }: {
   children: React.ReactNode;
-  nav: AdminNavItem[];
+  groups: AdminNavGroup[];
   operator: string;
+  /** The Traveloop operator also holds the Traveloop console, and can switch to it. */
+  canSwitch: boolean;
   /** A form, so signing out stays a POST rather than a link. */
   signOut: React.ReactNode;
 }) {
@@ -38,84 +51,97 @@ export default function AdminShell({
   }, []);
 
   return (
-    <div className={`us-admin${railOpen ? " rail-open" : ""}`}>
+    <div className={`admin-shell${railOpen ? " rail-open" : ""}`}>
       <button
         type="button"
-        className="us-admin-scrim"
+        className="admin-rail-scrim"
         aria-label="Close navigation"
         tabIndex={railOpen ? 0 : -1}
         onClick={() => setRailOpen(false)}
       />
 
-      <aside className="us-admin-rail">
-        <div className="us-admin-railhead">
-          <Link className="us-wordmark" href="/urban-sprint/admin" aria-label="Urban Sprint admin">
-            <span className="us-wordmark-mark" aria-hidden>
-              US
-            </span>
-            <span className="us-wordmark-text">
-              <b>Urban</b>
-              <i>Sprint</i>
-            </span>
+      <aside className="admin-rail">
+        <div className="admin-rail-head">
+          <Link className="admin-rail-logo" href="/urban-sprint/admin" aria-label="Urban Sprint console home">
+            <Image src="/traveloop-logo.webp" alt="Traveloop" width={1280} height={345} priority />
           </Link>
-          <span className="us-admin-badge">Control</span>
+          {canSwitch ? (
+            <ConsoleSwitch current="urban-sprint" />
+          ) : (
+            <span className="admin-rail-badge is-sprint">Urban Sprint</span>
+          )}
         </div>
 
-        <nav className="us-admin-nav" aria-label="Console sections">
-          {nav.map((item) => {
-            // The overview lives at the section root, so it needs an exact
-            // match or it would light up on every child route.
-            const active =
-              item.href === "/urban-sprint/admin"
-                ? pathname === item.href
-                : pathname.startsWith(item.href);
+        <div className="usc-rail-scroll">
+          {groups.map((group) => (
+            <div key={group.label}>
+              <p className="admin-rail-section">{group.label}</p>
+              <nav className="admin-rail-nav" aria-label={group.label}>
+                {group.items.map((item) => {
+                  // The overview is the section root, so it needs an exact
+                  // match or it would light up on every child route.
+                  const active =
+                    item.href === "/urban-sprint/admin"
+                      ? pathname === item.href
+                      : pathname.startsWith(item.href);
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`us-admin-link${active ? " is-active" : ""}`}
-                aria-current={active ? "page" : undefined}
-                onClick={() => setRailOpen(false)}
-              >
-                <Icon name={item.icon} />
-                {item.label}
-                {item.count !== undefined && item.count > 0 && (
-                  <span className="us-admin-count">{item.count}</span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`admin-rail-link${active ? " is-active" : ""}`}
+                      aria-current={active ? "page" : undefined}
+                      onClick={() => setRailOpen(false)}
+                    >
+                      <Icon name={item.icon} />
+                      {item.label}
+                      {item.count !== undefined && item.count > 0 && (
+                        <span className={`admin-rail-count${item.alert ? " is-alert" : ""}`}>
+                          {item.count}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+          ))}
+        </div>
 
-        <div className="us-admin-railfoot">
-          <Link className="us-admin-public" href="/urban-sprint" target="_blank">
-            <Icon name="eye" />
-            Public page
+        <div className="admin-rail-foot">
+          <Link className="usc-rail-public" href="/urban-sprint" target="_blank">
+            <Icon name="external" />
+            Open public site
           </Link>
-          <p className="us-admin-operator">{operator}</p>
+          <div className="admin-rail-user">
+            <span className="admin-rail-avatar" aria-hidden="true">
+              {operator.slice(0, 2).toUpperCase()}
+            </span>
+            <span>
+              <span className="admin-rail-user-name">{operator}</span>
+              <span className="admin-rail-user-role">
+                {canSwitch ? "Traveloop & Urban Sprint admin" : "Urban Sprint admin"}
+              </span>
+            </span>
+          </div>
           {signOut}
         </div>
       </aside>
 
-      <div className="us-admin-main">
-        <div className="us-admin-topbar">
+      <main className="admin-content">
+        <div className="admin-content-inner">
           <button
             type="button"
-            className="us-admin-burger"
-            aria-label="Open navigation"
+            className="admin-rail-toggle"
             aria-expanded={railOpen}
             onClick={() => setRailOpen(true)}
           >
-            <span aria-hidden />
-            <span aria-hidden />
-            <span aria-hidden />
+            <Icon name="grid" />
+            Menu
           </button>
-          <span className="us-admin-topname">Urban Sprint control</span>
+          {children}
         </div>
-
-        <main className="us-admin-content">{children}</main>
-      </div>
+      </main>
     </div>
   );
 }

@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/urban-sprint/auth";
 import { claimTeam, drawBooster, getTeamForGamemaster } from "@/lib/urban-sprint/teams-db";
 import { completeStation } from "@/lib/urban-sprint/completions-db";
+import { racePhase } from "@/lib/urban-sprint/race-clock";
+import { finishRace, startRace } from "@/lib/urban-sprint/race-db";
 import { createStation } from "@/lib/urban-sprint/stations-db";
 import type { ScoreBreakdown } from "@/lib/urban-sprint/types";
 
@@ -36,10 +38,6 @@ function revalidateRace() {
   revalidatePath(GAMEMASTER);
   revalidatePath(`${GAMEMASTER}/stations`);
   revalidatePath("/urban-sprint/gamemaster/leaderboard");
-  revalidatePath("/urban-sprint/team");
-  revalidatePath("/urban-sprint/team/shops");
-  revalidatePath("/urban-sprint/team/leaderboard");
-  revalidatePath("/urban-sprint/leaderboard");
   revalidatePath("/urban-sprint");
   revalidatePath("/urban-sprint/admin");
   revalidatePath("/urban-sprint/admin/activity");
@@ -82,6 +80,37 @@ export async function drawBoosterAction() {
   redirect(`${GAMEMASTER}?${result.alreadyDrawn ? "already=1" : "drawn=1"}`);
 }
 
+/**
+ * Starts the team's 180 minutes. Only after the booster is drawn, and only
+ * once — the write is conditional on the clock not having started.
+ */
+export async function startRaceAction() {
+  const session = await requireRole("gamemaster");
+  const team = await getTeamForGamemaster(session.userId);
+
+  if (!team) redirect(`${GAMEMASTER}?error=noteam`);
+
+  const result = await startRace(team.id);
+  if (!result.ok && result.reason === "no-booster") redirect(`${GAMEMASTER}?error=nobooster`);
+
+  revalidateRace();
+  redirect(GAMEMASTER);
+}
+
+/** Stops the clock and records the team's points and time on the board. */
+export async function finishRaceAction() {
+  const session = await requireRole("gamemaster");
+  const team = await getTeamForGamemaster(session.userId);
+
+  if (!team) redirect(`${GAMEMASTER}?error=noteam`);
+  if (!team.raceStartedAt) redirect(`${GAMEMASTER}?error=notstarted`);
+
+  await finishRace(team.id, session.userId);
+
+  revalidateRace();
+  redirect(GAMEMASTER);
+}
+
 export type CompleteState =
   | { status: "idle" }
   | { status: "ok"; stationId: number; stationName: string; breakdown: ScoreBreakdown }
@@ -118,6 +147,16 @@ export async function completeStationAction(
 
   if (!team.booster) {
     return { status: "error", message: "Draw your team's booster before confirming stations." };
+  }
+
+  // Points only count on the clock: before Start, and after Finish or the
+  // 180 minutes, there's nothing to confirm.
+  const phase = racePhase(team);
+  if (phase === "ready") {
+    return { status: "error", message: "Start the race first — the clock has to be running." };
+  }
+  if (phase === "finished") {
+    return { status: "error", message: "Your race is over, so no more stations can be confirmed." };
   }
 
   const result = await completeStation(team.id, stationId, session.userId);

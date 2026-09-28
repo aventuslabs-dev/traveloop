@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/urban-sprint/auth";
-import { getLeaderboard } from "@/lib/urban-sprint/leaderboard-db";
+import { getBoard } from "@/lib/urban-sprint/results-db";
 import { getSettings } from "@/lib/urban-sprint/settings-db";
 import { listStationsForTeam } from "@/lib/urban-sprint/stations-db";
-import { getTeamForGamemaster } from "@/lib/urban-sprint/teams-db";
+import { bookingReferenceForTeam, getTeamForGamemaster } from "@/lib/urban-sprint/teams-db";
 import { ordinal, points } from "@/lib/urban-sprint/format";
 import AppBar from "../../_components/AppBar";
-import Leaderboard from "../../_components/Leaderboard";
+import ResultsBoard from "../../_components/ResultsBoard";
 import LiveRefresh from "../../_components/LiveRefresh";
 import TabBar from "../../_components/TabBar";
 import { LivePill } from "../../_components/ui";
@@ -25,12 +25,13 @@ export default async function GamemasterLeaderboardPage() {
   if (!team) redirect("/urban-sprint/gamemaster");
 
   const [board, settings, stations] = await Promise.all([
-    getLeaderboard(),
+    getBoard(),
     getSettings(),
     listStationsForTeam(team.id, team.booster),
   ]);
 
-  const mine = board.find((row) => row.id === team.id);
+  const reference = bookingReferenceForTeam(team);
+  const mine = board.find((row) => row.reference === reference);
   const remaining = stations.filter((station) => !station.completed).length;
 
   return (
@@ -62,9 +63,9 @@ export default async function GamemasterLeaderboardPage() {
           </div>
         </section>
 
-        <Leaderboard rows={board} highlightTeamId={team.id} />
+        <ResultsBoard rows={board} highlightReference={reference} />
 
-        <Link className="us-btn us-btn-ghost us-btn-block" href="/urban-sprint/leaderboard" target="_blank">
+        <Link className="us-btn us-btn-ghost us-btn-block" href="/urban-sprint#leaderboard" target="_blank">
           Open the public board
         </Link>
       </div>

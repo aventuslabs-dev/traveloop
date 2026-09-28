@@ -20,7 +20,7 @@ const staticPaths: Entry[] = [
   { path: "/blogs", changeFrequency: "weekly", priority: 0.6 },
   { path: "/contact", changeFrequency: "monthly", priority: 0.7 },
   { path: "/urban-sprint", changeFrequency: "weekly", priority: 0.5 },
-  { path: "/urban-sprint/leaderboard", changeFrequency: "daily", priority: 0.4 },
+  { path: "/urban-sprint/book", changeFrequency: "daily", priority: 0.5 },
   { path: "/terms", changeFrequency: "yearly", priority: 0.3 },
   { path: "/privacy", changeFrequency: "yearly", priority: 0.3 },
 ];

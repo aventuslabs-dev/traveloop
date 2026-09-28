@@ -135,9 +135,7 @@ const { error: teamError } = await db
   );
 if (teamError) fail("Teams", teamError);
 
-const { data: teams } = await db.from("us_teams").select("id, slug");
-const teamId = Object.fromEntries(teams.map((row) => [row.slug, row.id]));
-console.log(`Teams: ${teams.length}`);
+console.log(`Teams: ${TEAMS.length}`);
 
 /* -------------------------------- Stations -------------------------------- */
 
@@ -183,16 +181,13 @@ console.log(`Stations: ${STATIONS.length}`);
 
 /* --------------------------------- People --------------------------------- */
 
+// Gamemasters only. No admin: the Traveloop admin login (ADMIN_LOGIN_EMAIL) is
+// the Urban Sprint admin too. No racers: they don't sign in — a booked team
+// follows its race from its private link.
 const PEOPLE = [
-  { email: "control@urbansprint.test", role: "admin", name: "Race Control" },
   { email: "gm1@urbansprint.test", role: "gamemaster", name: "Aisyah Rahim" },
   { email: "gm2@urbansprint.test", role: "gamemaster", name: "Daniel Ooi" },
   { email: "gm3@urbansprint.test", role: "gamemaster", name: "Priya Nair" },
-  { email: "player1@urbansprint.test", role: "participant", name: "Wei Ling", team: "night-owls" },
-  { email: "player2@urbansprint.test", role: "participant", name: "Farid Hassan", team: "night-owls" },
-  { email: "player3@urbansprint.test", role: "participant", name: "Tan Mei", team: "street-cats" },
-  { email: "player4@urbansprint.test", role: "participant", name: "Arjun Das", team: "street-cats" },
-  { email: "player5@urbansprint.test", role: "participant", name: "Nurul Izzah", team: "monsoon-crew" },
 ];
 
 // One listUsers() call rather than one lookup per person.
@@ -234,13 +229,6 @@ for (const person of PEOPLE) {
     { onConflict: "user_id" }
   );
   if (profileError) fail(`Profile for ${person.email}`, profileError);
-
-  if (person.team) {
-    const { error: memberError } = await db
-      .from("us_team_members")
-      .upsert({ user_id: userId, team_id: teamId[person.team] }, { onConflict: "user_id" });
-    if (memberError) fail(`Team membership for ${person.email}`, memberError);
-  }
 }
 
 console.log(`People: ${PEOPLE.length}`);
@@ -251,7 +239,7 @@ const { error: settingsError } = await db
   .from("us_settings")
   .update({
     event_name: "Urban Sprint",
-    event_tagline: "One city. Six teams. Ninety minutes on the clock.",
+    event_tagline: "One city. Six teams. Three hours on the clock.",
     event_status: "live",
     event_location: "George Town, Penang",
     default_base_points: 30,
@@ -262,6 +250,5 @@ if (settingsError) fail("Settings", settingsError);
 
 console.log("");
 console.log("Urban Sprint seeded. Sign in at /urban-sprint/login:");
-console.log(`  Admin        control@urbansprint.test / ${password}`);
+console.log("  Admin        the Traveloop admin login (ID \"admin\")");
 console.log(`  Gamemaster   gm1@urbansprint.test / ${password}`);
-console.log(`  Participant  player1@urbansprint.test / ${password}`);

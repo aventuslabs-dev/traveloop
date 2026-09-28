@@ -51,6 +51,7 @@ export default async function AdminOrderDetailPage({ params, searchParams }: Ord
   const error = typeof query.error === "string" ? ERRORS[query.error] : null;
 
   const registrations = await getPassRegistrationsByOrder(sessionId);
+  const race = order.product.kind === "urban_sprint" ? order.product : null;
 
   return (
     <>
@@ -58,8 +59,8 @@ export default async function AdminOrderDetailPage({ params, searchParams }: Ord
         backHref="/admin"
         backLabel="All orders"
         title={order.invoiceNumber || "Order"}
-        subtitle={`${order.customerName ?? "Guest"} · ${order.quantity} pass${
-          order.quantity === 1 ? "" : "es"
+        subtitle={`${order.customerName ?? "Guest"} · ${
+          race ? `Urban Sprint team · ${order.quantity} Platinum Passes` : `${order.quantity} pass${order.quantity === 1 ? "" : "es"}`
         }`}
         actions={
           <a
@@ -96,9 +97,40 @@ export default async function AdminOrderDetailPage({ params, searchParams }: Ord
             <dd>{formatDay(order.createdAt)}</dd>
           </div>
           <div>
+            <dt>Product</dt>
+            <dd>{race ? "Urban Sprint team entry" : "Premier Pass"}</dd>
+          </div>
+          {race && (
+            <>
+              <div>
+                <dt>Booking ID</dt>
+                <dd>
+                  {/* The Urban Sprint console has the slot, the team and its result. */}
+                  <Link
+                    className="ad-link is-mono"
+                    href={`/urban-sprint/admin/bookings?q=${encodeURIComponent(race.reference)}`}
+                  >
+                    {race.reference}
+                  </Link>
+                </dd>
+              </div>
+              <div>
+                <dt>Race</dt>
+                <dd>{race.description}</dd>
+              </div>
+            </>
+          )}
+          <div>
             <dt>Pass</dt>
             <dd>
-              <Tier name={order.passName} />
+              {race ? (
+                <span className="ad-cell-stack">
+                  <Tier name="Platinum" />
+                  <span>Included for every racer</span>
+                </span>
+              ) : (
+                <Tier name={order.passName} />
+              )}
             </dd>
           </div>
           <div>
@@ -185,7 +217,7 @@ export default async function AdminOrderDetailPage({ params, searchParams }: Ord
       </Panel>
 
       <Panel
-        title="Traveller registrations"
+        title={race ? "Racer registrations" : "Traveller registrations"}
         icon="users"
         count={`${registrations.length} of ${order.quantity}`}
         padded={false}

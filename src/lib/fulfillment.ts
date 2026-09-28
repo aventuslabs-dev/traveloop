@@ -15,6 +15,7 @@ import {
 } from "./pass-registrations-db";
 import { getCheckoutDraft, deleteCheckoutDraft, type DraftItem } from "./checkout-drafts-db";
 import type { PassRegistration } from "./registration";
+import { raceDetailsFor } from "./urban-sprint/race-details";
 
 export type PassOrderItem = DraftItem;
 
@@ -72,9 +73,28 @@ function discountFromMetadata(metadata: Stripe.Metadata | null): OrderDiscount {
   };
 }
 
+/**
+ * What an order bought (orders.product). An Urban Sprint team entry is sold
+ * with a Platinum Pass for every racer, so it goes through the same order,
+ * account and pass pipeline as a Premier Pass purchase — `items` holds the
+ * racers' passes, and this says what the money was for.
+ */
+export type OrderProduct =
+  | { kind: "pass" }
+  | {
+      kind: "urban_sprint";
+      /** The Booking ID, "US-ABCD1234". */
+      reference: string;
+      /** "The Night Owls · Sat, 3 Oct 2026, 9:00 AM", fixed at purchase. */
+      description: string;
+    };
+
+export const PASS_PRODUCT: OrderProduct = { kind: "pass" };
+
 export type PassOrder = {
   /** Stripe Checkout Session id — the natural idempotency key for an order. */
   sessionId: string;
+  product: OrderProduct;
   /** The draft id this order's items came from, if any — deleted once fulfilment finishes with it. */
   draftId: string | null;
   /** One entry per pass purchased; length >= 1. */
@@ -87,7 +107,16 @@ export type PassOrder = {
   customerPhone: string | null;
   paymentIntentId: string | null;
   discount: OrderDiscount;
+  /**
+   * Which item is the buyer's own registration, for their portal profile.
+   * Omitted means the first, as on /passes/register; null means none of them
+   * is — an Urban Sprint payer need not be racing.
+   */
+  buyerItem?: number | null;
 };
+
+/** Whether the buyer's receipt is out, for callers that keep a record of their own (Urban Sprint bookings). */
+export type ReceiptOutcome = { sent: true } | { sent: false; reason: string };
 
 /** Pulls the fields we care about out of a completed Checkout Session, resolving its draft. */
 export async function toPassOrder(session: Stripe.Checkout.Session): Promise<PassOrder> {
@@ -99,6 +128,7 @@ export async function toPassOrder(session: Stripe.Checkout.Session): Promise<Pas
 
   return {
     sessionId: session.id,
+    product: PASS_PRODUCT,
     draftId,
     items: items ?? [],
     amountTotal: session.amount_total ?? 0,
@@ -114,9 +144,10 @@ export async function toPassOrder(session: Stripe.Checkout.Session): Promise<Pas
   };
 }
 
-/** The buyer's own registration, used to autofill their portal profile — the first pass in the cart. */
+/** The buyer's own registration, used to autofill their portal profile — the first pass in the cart unless told otherwise. */
 function primaryRegistration(order: PassOrder): PassRegistration | null {
-  return order.items[0]?.registration ?? null;
+  if (order.buyerItem === null) return null;
+  return order.items[order.buyerItem ?? 0]?.registration ?? null;
 }
 
 /**
@@ -136,8 +167,15 @@ function primaryRegistration(order: PassOrder): PassRegistration | null {
  * order already there and returned, so the buyer never got their receipt and
  * nothing anywhere said so. Now the retry lands on a receipt that hasn't been
  * sent and sends it.
+ *
+ * Both products come through here. An Urban Sprint team entry arrives from
+ * lib/urban-sprint/booking-fulfillment with one Platinum Pass per racer as
+ * its items, so the team's payer gets the same account, passes, invoice and
+ * receipt as any pass buyer — the receipt just carries the race as well.
  */
-export async function fulfillPassOrder(order: PassOrder): Promise<void> {
+export async function fulfillPassOrder(
+  order: PassOrder
+): Promise<{ stored: StoredOrder; receipt: ReceiptOutcome }> {
   const account = order.customerEmail
     ? await findOrCreateCustomerAccount(order.customerEmail, order.customerName)
     : { userId: null, isNew: false as const };
@@ -190,7 +228,7 @@ export async function fulfillPassOrder(order: PassOrder): Promise<void> {
     );
   }
 
-  await deliverReceipt(order, stored, account);
+  const receipt = await deliverReceipt(order, stored, account);
 
   // The draft holds a second copy of each traveller's passport number and
   // address, so it goes as soon as it's redundant. If the registrations
@@ -199,6 +237,8 @@ export async function fulfillPassOrder(order: PassOrder): Promise<void> {
   if (order.draftId && itemsStored) {
     await deleteCheckoutDraft(order.draftId);
   }
+
+  return { stored, receipt };
 }
 
 /**
@@ -219,45 +259,43 @@ async function deliverReceipt(
   order: PassOrder,
   stored: StoredOrder,
   account: CustomerAccountResult
-): Promise<void> {
+): Promise<ReceiptOutcome> {
   if (stored.confirmationSentAt) {
     console.info(`[fulfillment] Receipt for ${stored.sessionId} already went out — not resending.`);
-    return;
+    return { sent: true };
   }
 
   if (!stored.customerEmail) {
-    await recordConfirmationFailure(
-      stored.sessionId,
-      "Stripe didn't give us an email address for this buyer, so no receipt could be sent."
-    );
-    return;
+    const reason = "Stripe didn't give us an email address for this buyer, so no receipt could be sent.";
+    await recordConfirmationFailure(stored.sessionId, reason);
+    return { sent: false, reason };
   }
 
   try {
     const items = await receiptItems(order, stored.sessionId);
+    const race = await raceDetailsFor(stored);
 
     if (account.isNew) {
-      await sendAccountWelcomeEmail(stored, items, account.password);
+      await sendAccountWelcomeEmail(stored, items, account.password, race);
     } else {
-      await sendOrderConfirmationEmail(stored, items);
+      await sendOrderConfirmationEmail(stored, items, race);
     }
   } catch (error) {
     console.error(`[fulfillment] Receipt for ${stored.sessionId} could not be sent:`, error);
 
-    const reason = error instanceof Error ? error.message : String(error);
-    await recordConfirmationFailure(
-      stored.sessionId,
-      // An account created in this same run has a generated password that
-      // only the failed email carried. Say so, because the fix is a password
-      // reset from /admin > Customers, not just a resend.
-      account.isNew
-        ? `${reason} — this buyer's new account password was in that email and never reached them.`
-        : reason
-    );
-    return;
+    const message = error instanceof Error ? error.message : String(error);
+    // An account created in this same run has a generated password that
+    // only the failed email carried. Say so, because the fix is a password
+    // reset from /admin > Customers, not just a resend.
+    const reason = account.isNew
+      ? `${message} — this buyer's new account password was in that email and never reached them.`
+      : message;
+    await recordConfirmationFailure(stored.sessionId, reason);
+    return { sent: false, reason };
   }
 
   await markConfirmationSent(stored.sessionId);
+  return { sent: true };
 }
 
 /**

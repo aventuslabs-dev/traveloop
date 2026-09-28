@@ -1,177 +1,258 @@
 import Link from "next/link";
+import { Icon } from "@/app/components/Icons";
+import {
+  formatBookingDate,
+  formatRinggit,
+  formatSlotTime,
+  malaysiaToday,
+} from "@/lib/urban-sprint/booking-config";
+import {
+  getAvailability,
+  getBookingStats,
+  listAwaitingResults,
+  listBookingsNeedingAttention,
+  type StoredTeamBooking,
+} from "@/lib/urban-sprint/bookings-db";
+import { getActivityCounts } from "@/lib/urban-sprint/completions-db";
+import { formatDuration, points } from "@/lib/urban-sprint/format";
+import { getBoard } from "@/lib/urban-sprint/results-db";
 import { getSettings } from "@/lib/urban-sprint/settings-db";
-import { getCampaignStats } from "@/lib/urban-sprint/stats-db";
-import { countUsersByRole } from "@/lib/urban-sprint/users-db";
-import { getActivityCounts, listActivity } from "@/lib/urban-sprint/completions-db";
-import { getLeaderboard } from "@/lib/urban-sprint/leaderboard-db";
-import { EVENT_STATUSES } from "@/lib/urban-sprint/types";
-import { points, timeAgo } from "@/lib/urban-sprint/format";
-import Leaderboard from "../_components/Leaderboard";
 import LiveRefresh from "../_components/LiveRefresh";
-import { LivePill } from "../_components/ui";
-import { updateSettingsAction } from "./actions";
-import { AdminFlash, AdminHead, Panel } from "./ui";
+import RaceTimer from "../_components/RaceTimer";
+import SlotGrid from "./SlotGrid";
+import {
+  AdminFlash,
+  EmptyState,
+  LiveBadge,
+  PageHeader,
+  Panel,
+  Pill,
+  RankBadge,
+  StatGrid,
+  Swatch,
+  bookingHref,
+} from "./ui";
 
-const STATUS_LABEL: Record<string, string> = {
-  upcoming: "Upcoming — teams still forming",
-  live: "Live — race in progress",
-  paused: "Paused — play on hold",
-  ended: "Ended — final standings",
-};
+/** How many days of the slot grid the overview shows — a week is what gets planned against. */
+const WEEK = 7;
 
+/**
+ * The console's front page: what's booked, what needs doing, and how the
+ * races are going. Every tile and list links through to the page where the
+ * work actually happens.
+ */
 export default async function AdminOverviewPage({
   searchParams,
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const params = await searchParams;
+  const today = malaysiaToday();
 
-  const [settings, stats, roles, activity, feed, board] = await Promise.all([
+  const [settings, stats, availability, attention, awaiting, activity, board] = await Promise.all([
     getSettings(),
-    getCampaignStats(),
-    countUsersByRole(),
+    getBookingStats(today),
+    getAvailability(),
+    listBookingsNeedingAttention(),
+    listAwaitingResults(today),
     getActivityCounts(),
-    listActivity(6),
-    getLeaderboard(5),
+    getBoard(),
   ]);
+  const racingNow = board.filter((row) => row.racing).length;
+
+  const todo = [
+    ...attention.map((booking) => ({ booking, kind: todoKind(booking) })),
+    ...awaiting.slice(0, 8).map((booking) => ({ booking, kind: "result" as const })),
+  ];
 
   return (
     <>
-      <LiveRefresh revision={settings.revision} intervalMs={5000} />
+      <LiveRefresh revision={settings.revision} intervalMs={8000} />
 
-      <AdminHead
+      <PageHeader
         title="Overview"
-        note="The campaign at a glance, and the settings that shape how it scores."
+        subtitle={`${settings.eventName} · ${settings.eventLocation}`}
+        actions={
+          <>
+            {/* A file download, not a page: <Link> would try to route to it. */}
+            <a className="ad-btn" href="/api/urban-sprint/export?kind=bookings" download>
+              <Icon name="download" />
+              Export bookings
+            </a>
+            <Link className="ad-btn ad-btn-primary" href="/urban-sprint/admin/results">
+              <Icon name="flag" />
+              Enter results
+            </Link>
+          </>
+        }
       />
 
       <AdminFlash params={params} />
 
-      <div className="us-adminstats">
-        <Stat label="Teams" value={stats.teams} note={`${stats.gamemastersOnCourse} on course`} />
-        <Stat label="Stations" value={stats.stations} note="active" />
-        <Stat
-          label="Stations cleared"
-          value={activity.valid}
-          note={activity.voided > 0 ? `${activity.voided} voided` : "none voided"}
-        />
-        <Stat label="Points awarded" value={points(stats.pointsAwarded)} note="across all teams" />
-        <Stat
-          label="People"
-          value={roles.admin + roles.gamemaster + roles.participant}
-          note={`${roles.gamemaster} GM · ${roles.participant} players`}
-        />
-      </div>
+      <StatGrid
+        stats={[
+          {
+            label: "Upcoming teams",
+            value: stats.upcomingTeams,
+            note: `${stats.upcomingRacers} racers from today on`,
+          },
+          { label: "Racing today", value: stats.todayTeams, note: formatBookingDate(today) },
+          {
+            label: "Awaiting results",
+            value: stats.awaitingResults,
+            note: stats.awaitingResults > 0 ? "raced, not scored yet" : "all scored",
+            alert: stats.awaitingResults > 0,
+          },
+          {
+            label: "Revenue",
+            value: formatRinggit(stats.revenueCents),
+            note: `${stats.paidTeams} paid team${stats.paidTeams === 1 ? "" : "s"}`,
+          },
+          {
+            label: "Email issues",
+            value: stats.emailIssues,
+            note: stats.emailIssues > 0 ? "confirmation not delivered" : "every team confirmed",
+            alert: stats.emailIssues > 0,
+          },
+        ]}
+      />
 
-      <div className="us-admingrid">
-        <Panel
-          title="Campaign settings"
-          note="What the public page says, and the default a new station is priced at."
-        >
-          <form className="us-form us-form-grid" action={updateSettingsAction}>
-            <label className="us-field">
-              <span>Event name</span>
-              <input name="eventName" defaultValue={settings.eventName} required />
-            </label>
+      <div className="usc-grid">
+        <div>
+          <Panel
+            title="The week ahead"
+            icon="calendar"
+            count={`teams per slot`}
+            padded={false}
+            actions={
+              <Link className="ad-btn ad-btn-sm" href="/urban-sprint/admin/bookings">
+                All bookings
+              </Link>
+            }
+          >
+            <SlotGrid days={availability.slice(0, WEEK)} />
+          </Panel>
 
-            <label className="us-field">
-              <span>Location</span>
-              <input name="eventLocation" defaultValue={settings.eventLocation} />
-            </label>
-
-            <label className="us-field us-field-wide">
-              <span>Tagline</span>
-              <input name="eventTagline" defaultValue={settings.eventTagline} />
-            </label>
-
-            <label className="us-field">
-              <span>Status</span>
-              <select name="eventStatus" defaultValue={settings.eventStatus}>
-                {EVENT_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {STATUS_LABEL[status]}
-                  </option>
+          <Panel title="Needs attention" icon="alert" count={String(todo.length)} padded={false}>
+            {todo.length === 0 ? (
+              <EmptyState icon="check" title="Nothing waiting">
+                Every paid team has its confirmation, and every team that has raced has a result.
+              </EmptyState>
+            ) : (
+              <ul className="usc-todo">
+                {todo.map(({ booking, kind }) => (
+                  <TodoItem key={`${kind}-${booking.id}`} booking={booking} kind={kind} />
                 ))}
-              </select>
-            </label>
+              </ul>
+            )}
+          </Panel>
+        </div>
 
-            <label className="us-field">
-              <span>Default base points</span>
-              <input
-                name="defaultBasePoints"
-                type="number"
-                min="0"
-                step="0.5"
-                defaultValue={settings.defaultBasePoints}
-              />
-              <small>New stations start here. Existing stations keep their own value.</small>
-            </label>
-
-            <div className="us-form-actions us-field-wide">
-              <button className="us-btn us-btn-primary" type="submit">
-                Save settings
-              </button>
+        <div>
+          <Panel
+            title="Leaderboard"
+            icon="flag"
+            padded={false}
+            actions={
+              <>
+                <LiveBadge />
+                <Link className="ad-btn ad-btn-sm" href="/urban-sprint/admin/leaderboard">
+                  Full board
+                </Link>
+              </>
+            }
+          >
+            <div className="ad-panel-body">
+              <p className="ad-panel-note">
+                <strong>{board.length}</strong> team{board.length === 1 ? "" : "s"} ranked ·{" "}
+                <strong>{racingNow}</strong> racing now · <strong>{activity.valid}</strong> stations
+                cleared
+              </p>
             </div>
-          </form>
-        </Panel>
-
-        <Panel
-          title="Standings"
-          note="Top five, live."
-          actions={
-            <Link className="us-btn us-btn-ghost us-btn-sm" href="/urban-sprint/admin/leaderboard">
-              Full board
-            </Link>
-          }
-        >
-          <Leaderboard rows={board} />
-        </Panel>
+            {board.length === 0 ? (
+              <EmptyState icon="flag" title="No teams on the board yet">
+                A team joins the moment its gamemaster starts the race.
+              </EmptyState>
+            ) : (
+              <div className="ad-table-scroll">
+                <table className="ad-table">
+                  <tbody>
+                    {board.slice(0, 5).map((row) => (
+                      <tr key={row.reference}>
+                        <td>
+                          <RankBadge rank={row.rank} />
+                        </td>
+                        <td>
+                          <span className="ad-cell-stack">
+                            <span className="usc-name">
+                              {row.color && <Swatch color={row.color} />}
+                              <Link className="usc-row-link" href={bookingHref(row.reference)}>
+                                {row.teamName}
+                              </Link>
+                            </span>
+                            <span>{row.racing ? "Racing now" : formatBookingDate(row.date)}</span>
+                          </span>
+                        </td>
+                        <td className="is-num is-strong">{points(row.points)} pts</td>
+                        <td className="is-num">
+                          {row.racing && row.startedAt ? (
+                            <RaceTimer startedAt={row.startedAt} />
+                          ) : (
+                            formatDuration(row.seconds)
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+        </div>
       </div>
-
-      <Panel
-        title="Latest activity"
-        actions={
-          <>
-            <LivePill />
-            <Link className="us-btn us-btn-ghost us-btn-sm" href="/urban-sprint/admin/activity">
-              All activity
-            </Link>
-          </>
-        }
-      >
-        {feed.length === 0 ? (
-          <p className="us-panel-empty">No stations have been confirmed yet.</p>
-        ) : (
-          <ul className="us-feed">
-            {feed.map((row) => (
-              <li key={row.id} className={row.status === "void" ? "is-void" : undefined}>
-                <div>
-                  <p className="us-feed-title">
-                    {row.teamName} → {row.stationName}
-                  </p>
-                  <p className="us-feed-meta">
-                    {row.categoryName} · {row.gamemasterName} · {timeAgo(row.createdAt)}
-                    {row.status === "void" && " · voided"}
-                  </p>
-                </div>
-                <span className="us-feed-points">
-                  +{points(row.totalPoints)}
-                  {row.boosterApplied && <i>boosted</i>}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
     </>
   );
 }
 
-function Stat({ label, value, note }: { label: string; value: string | number; note?: string }) {
+type TodoKind = "email" | "settling" | "result";
+
+function todoKind(booking: StoredTeamBooking): TodoKind {
+  return booking.status === "processing" ? "settling" : "email";
+}
+
+function TodoItem({ booking, kind }: { booking: StoredTeamBooking; kind: TodoKind }) {
+  const race = `${formatBookingDate(booking.date)}, ${formatSlotTime(booking.time)}`;
+
+  const copy = {
+    email: {
+      pill: <Pill label="Email not sent" tone="danger" />,
+      note: booking.confirmationError ?? "The confirmation hasn't gone out yet.",
+      action: "Open booking",
+    },
+    settling: {
+      pill: <Pill label="Payment settling" tone="warn" />,
+      note: "Checkout finished; the bank hasn't confirmed the money yet. The place is held.",
+      action: "Open booking",
+    },
+    result: {
+      pill: <Pill label="No result" tone="warn" />,
+      note: `Raced ${race}.`,
+      action: "Enter result",
+    },
+  }[kind];
+
   return (
-    <div className="us-adminstat">
-      <p className="us-adminstat-label">{label}</p>
-      <p className="us-adminstat-value">{value}</p>
-      {note && <p className="us-adminstat-note">{note}</p>}
-    </div>
+    <li>
+      {copy.pill}
+      <span className="usc-todo-body">
+        <b>
+          {booking.teamName} <span className="usc-mono usc-muted">{booking.reference}</span>
+        </b>
+        <span>{copy.note}</span>
+      </span>
+      <Link className="ad-btn" href={bookingHref(booking.reference)}>
+        {copy.action}
+      </Link>
+    </li>
   );
 }

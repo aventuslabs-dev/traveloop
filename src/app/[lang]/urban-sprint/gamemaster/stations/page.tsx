@@ -1,14 +1,17 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/urban-sprint/auth";
 import { listCategories } from "@/lib/urban-sprint/categories-db";
-import { getStanding } from "@/lib/urban-sprint/leaderboard-db";
+import { racePhase } from "@/lib/urban-sprint/race-clock";
+import { getStanding } from "@/lib/urban-sprint/results-db";
 import { getSettings } from "@/lib/urban-sprint/settings-db";
 import { listStationsForTeam } from "@/lib/urban-sprint/stations-db";
-import { getTeamForGamemaster } from "@/lib/urban-sprint/teams-db";
+import { bookingReferenceForTeam, getTeamForGamemaster } from "@/lib/urban-sprint/teams-db";
 import { ordinal, points } from "@/lib/urban-sprint/format";
 import AppBar from "../../_components/AppBar";
 import LiveRefresh from "../../_components/LiveRefresh";
 import TabBar from "../../_components/TabBar";
+import { Flash } from "../../_components/ui";
 import StationBoard from "./StationBoard";
 import { gamemasterTabs } from "../../_components/tabs";
 
@@ -25,10 +28,11 @@ export default async function GamemasterStationsPage() {
     listStationsForTeam(team.id, team.booster),
     listCategories(),
     getSettings(),
-    getStanding(team.id),
+    getStanding(bookingReferenceForTeam(team) ?? ""),
   ]);
 
   const remaining = stations.filter((station) => !station.completed).length;
+  const phase = racePhase(team);
 
   return (
     <>
@@ -37,12 +41,24 @@ export default async function GamemasterStationsPage() {
       <AppBar
         title="Stations"
         subtitle={`${team.name} · ${points(team.points)} pts · ${
-          standing.rank ? ordinal(standing.rank) : "unranked"
+          standing.row ? ordinal(standing.row.rank) : "not on the board yet"
         }`}
         accent={team.color}
       />
 
       <div className="us-page has-tabs">
+        {phase !== "racing" && (
+          <Flash tone={phase === "ready" ? "info" : "err"}>
+            {phase === "ready" ? (
+              <>
+                Start the race on the <Link href="/urban-sprint/gamemaster">Team</Link> tab to
+                confirm stations. You can look around until then.
+              </>
+            ) : (
+              "The race is over, so stations can't be confirmed any more."
+            )}
+          </Flash>
+        )}
         <StationBoard
           stations={stations}
           categories={categories}
@@ -50,6 +66,7 @@ export default async function GamemasterStationsPage() {
           boosterName={team.booster.name}
           boosterCategory={team.booster.categoryName}
           bonusPercent={team.booster.bonusPercent}
+          locked={phase === "ready" ? "Start the race first" : phase === "finished" ? "Race over" : null}
         />
       </div>
 

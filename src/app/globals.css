@@ -1810,6 +1810,19 @@ a.contact-card:hover { transform:translateY(-3px); box-shadow:0 18px 40px rgba(8
   background:rgba(255,255,255,.09); font-family:var(--ad-mono); font-size:10px;
   letter-spacing:.14em; text-transform:uppercase; color:var(--ad-rail-muted);
 }
+/* The operator's Traveloop / Urban Sprint switch (ConsoleSwitch.tsx). */
+.admin-switch {
+  display:grid; grid-template-columns:1fr 1fr; gap:3px; margin-top:14px; padding:3px;
+  border-radius:9px; background:rgba(255,255,255,.07);
+}
+.admin-switch a {
+  padding:7px 6px; border-radius:6px; text-align:center; font-size:12px; font-weight:650;
+  color:var(--ad-rail-muted); text-decoration:none; white-space:nowrap;
+  transition:background .15s, color .15s;
+}
+.admin-switch a:hover { color:var(--ad-rail-ink); background:rgba(255,255,255,.06); }
+.admin-switch a.is-active { background:#fff; color:var(--ad-ink); }
+.admin-switch a.is-active.is-sprint { background:#d72936; color:#fff; }
 .admin-rail-section {
   margin:20px 20px 8px; font-family:var(--ad-mono); font-size:10px; letter-spacing:.16em;
   text-transform:uppercase; color:var(--ad-rail-muted);

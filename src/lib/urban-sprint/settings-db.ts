@@ -3,12 +3,18 @@ import type { EventStatus, Settings } from "./types";
 
 const FALLBACK: Settings = {
   eventName: "Urban Sprint",
-  eventTagline: "One city. Every shop. Ninety minutes on the clock.",
+  eventTagline: "One city. Every shop. Three hours on the clock.",
   eventStatus: "upcoming",
   eventStartsAt: null,
   eventLocation: "George Town, Penang",
   defaultBasePoints: 30,
   revision: 0,
+  rulesText: "Rules & Regulations will be confirmed by Traveloop before your race.",
+  consentText:
+    "I have read and understand the [Terms & Conditions](/terms) and [Privacy Notice](/privacy), " +
+    "and I consent to Traveloop using the information submitted for marketing purposes, where applicable.",
+  consentVersion: "draft-2026-09",
+  leaderboardLimit: 200,
 };
 
 /**
@@ -33,6 +39,15 @@ export async function getSettings(): Promise<Settings> {
     eventLocation: data.event_location,
     defaultBasePoints: Number(data.default_base_points),
     revision: Number(data.revision),
+    // The wording columns arrive with a later schema step; until it has run,
+    // the defaults keep the booking form working.
+    rulesText: data.rules_text ?? FALLBACK.rulesText,
+    consentText: data.consent_text ?? FALLBACK.consentText,
+    consentVersion: data.consent_version ?? FALLBACK.consentVersion,
+    leaderboardLimit:
+      data.leaderboard_limit === undefined || data.leaderboard_limit === null
+        ? FALLBACK.leaderboardLimit
+        : Number(data.leaderboard_limit),
   };
 }
 
@@ -58,6 +73,9 @@ export async function updateSettings(patch: {
   eventStartsAt?: string | null;
   eventLocation?: string;
   defaultBasePoints?: number;
+  rulesText?: string;
+  consentText?: string;
+  leaderboardLimit?: number;
 }): Promise<void> {
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
@@ -68,6 +86,18 @@ export async function updateSettings(patch: {
   if (patch.eventLocation !== undefined) row.event_location = patch.eventLocation;
   if (patch.defaultBasePoints !== undefined) {
     row.default_base_points = patch.defaultBasePoints;
+  }
+  if (patch.rulesText !== undefined) row.rules_text = patch.rulesText;
+  if (patch.leaderboardLimit !== undefined) row.leaderboard_limit = patch.leaderboardLimit;
+
+  // New declaration wording is a new version: bookings made from here on
+  // record that they agreed to this text, not the one before it.
+  if (patch.consentText !== undefined) {
+    const current = await getSettings();
+    if (patch.consentText !== current.consentText) {
+      row.consent_text = patch.consentText;
+      row.consent_version = new Date().toISOString().slice(0, 19).replace("T", " ");
+    }
   }
 
   // us_settings is where `revision` itself lives, so it can't carry a

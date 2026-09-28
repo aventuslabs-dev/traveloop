@@ -1,24 +1,21 @@
 import { listUrbanSprintUsers } from "@/lib/urban-sprint/users-db";
-import { listTeams } from "@/lib/urban-sprint/teams-db";
-import { URBAN_SPRINT_ROLES } from "@/lib/urban-sprint/types";
+import { URBAN_SPRINT_ROLES, type UrbanSprintUser } from "@/lib/urban-sprint/types";
 import { ROLE_LABEL } from "@/lib/urban-sprint/auth";
-import { initials } from "@/lib/urban-sprint/format";
 import {
   createUserAction,
   deleteUserAction,
   setPasswordAction,
   updateUserAction,
 } from "../actions";
-import { AdminFlash, AdminHead, Panel, RowEditor } from "../ui";
+import ConfirmButton from "../ConfirmButton";
+import Dialog from "../Dialog";
+import { AdminFlash, EmptyState, PageHeader, Panel, Pill, StatGrid } from "../ui";
 
 /**
- * Urban Sprint accounts.
- *
- * Creating one here grants Urban Sprint access and nothing else — these
- * accounts can't reach the Traveloop console, which is gated on a different
- * credential entirely. Team assignment only applies to participants; a
- * gamemaster's team is whichever one they claim for themselves at the start of
- * the race.
+ * Urban Sprint accounts: the organisers and gamemasters who sign in. Racers
+ * never do — each booked team follows its race from a private link — so there
+ * is nothing here to create for them. A gamemaster claims their own team at
+ * the start of the race; the Team column shows the one they're running.
  */
 export default async function AdminUsersPage({
   searchParams,
@@ -26,202 +23,188 @@ export default async function AdminUsersPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const params = await searchParams;
-  const [users, teams] = await Promise.all([listUrbanSprintUsers(), listTeams()]);
+  const users = await listUrbanSprintUsers();
 
-  const byRole = {
-    admin: users.filter((user) => user.role === "admin"),
-    gamemaster: users.filter((user) => user.role === "gamemaster"),
-    participant: users.filter((user) => user.role === "participant"),
-  };
+  const count = (role: string) => users.filter((user) => user.role === role).length;
 
   return (
     <>
-      <AdminHead
+      <PageHeader
         title="Users"
-        note={`${byRole.admin.length} admins · ${byRole.gamemaster.length} gamemasters · ${byRole.participant.length} participants`}
+        subtitle="Organisers and gamemasters sign in at /urban-sprint/login. Racers don't need an account — each team gets a private link."
+        actions={
+          <Dialog label="New account" icon="plus" variant="primary" title="New account" wide>
+            <UserForm />
+          </Dialog>
+        }
       />
 
       <AdminFlash params={params} />
 
-      <div className="us-admingrid is-narrowfirst">
-        <Panel title="New account" note="They sign in at /urban-sprint/login.">
-          <form className="us-form" action={createUserAction}>
-            <label className="us-field">
-              <span>Email</span>
-              <input name="email" type="email" autoComplete="off" required />
-            </label>
+      <StatGrid
+        stats={[
+          { label: "Admins", value: count("admin") },
+          { label: "Gamemasters", value: count("gamemaster") },
+          {
+            label: "Running a team",
+            value: users.filter((user) => user.teamName).length,
+          },
+          {
+            label: "Suspended",
+            value: users.filter((user) => !user.active).length,
+          },
+        ]}
+      />
 
-            <label className="us-field">
-              <span>Display name</span>
-              <input name="displayName" placeholder="Shown to their team" />
-            </label>
-
-            <label className="us-field">
-              <span>Temporary password</span>
-              <input name="password" type="text" minLength={8} required />
-              <small>At least 8 characters. They keep it until you reset it.</small>
-            </label>
-
-            <label className="us-field">
-              <span>Role</span>
-              <select name="role" defaultValue="participant">
-                {URBAN_SPRINT_ROLES.map((role) => (
-                  <option key={role} value={role}>
-                    {ROLE_LABEL[role]}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="us-field">
-              <span>Team</span>
-              <select name="teamId" defaultValue="">
-                <option value="">No team</option>
-                {teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
-              <small>Participants only — gamemasters claim their own team.</small>
-            </label>
-
-            <label className="us-field">
-              <span>Phone</span>
-              <input name="phone" placeholder="Optional" />
-            </label>
-
-            <button className="us-btn us-btn-primary us-btn-block" type="submit">
-              Create account
-            </button>
-          </form>
-        </Panel>
-
-        <Panel title="All accounts" count={users.length} flush>
-          {users.length === 0 ? (
-            <p className="us-panel-empty">No Urban Sprint accounts yet.</p>
-          ) : (
-            <div className="us-tablewrap">
-              <table className="us-table">
-                <thead>
-                  <tr>
-                    <th>Person</th>
-                    <th>Role</th>
-                    <th>Team</th>
-                    <th>Status</th>
-                    <th aria-label="Actions" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((user) => (
-                    <tr key={user.userId} className={user.active ? undefined : "is-dim"}>
-                      <td>
-                        <span className="us-tablename">
-                          <i className="us-avatar">{initials(user.displayName || user.email)}</i>
-                          {user.displayName || "—"}
-                        </span>
-                        <span className="us-tablesub">{user.email}</span>
-                      </td>
-
-                      <td>
-                        <span className={`us-pill us-pill-${user.role === "admin" ? "accent" : "neutral"}`}>
-                          {ROLE_LABEL[user.role]}
-                        </span>
-                      </td>
-
-                      <td>{user.teamName ?? <span className="us-dim">—</span>}</td>
-
-                      <td>
-                        <span className={`us-pill us-pill-${user.active ? "ok" : "warn"}`}>
-                          {user.active ? "Active" : "Suspended"}
-                        </span>
-                      </td>
-
-                      <td className="us-table-actions">
-                        <RowEditor>
-                          <form className="us-form" action={updateUserAction}>
+      <Panel title="All accounts" icon="users" count={String(users.length)} padded={false}>
+        {users.length === 0 ? (
+          <EmptyState icon="users" title="No Urban Sprint accounts yet" />
+        ) : (
+          <div className="ad-table-scroll">
+            <table className="ad-table">
+              <thead>
+                <tr>
+                  <th>Person</th>
+                  <th>Role</th>
+                  <th>Team</th>
+                  <th>Phone</th>
+                  <th>Status</th>
+                  <th className="is-num" aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.userId} className={user.active ? undefined : "is-dim"}>
+                    <td>
+                      <span className="ad-cell-stack">
+                        <b>{user.displayName || "—"}</b>
+                        <span>{user.email}</span>
+                      </span>
+                    </td>
+                    <td>
+                      <Pill
+                        label={user.isOperator ? "Traveloop admin" : ROLE_LABEL[user.role]}
+                        tone={user.role === "admin" ? "info" : "neutral"}
+                      />
+                    </td>
+                    <td>{user.teamName ?? <span className="usc-muted">—</span>}</td>
+                    <td>{user.phone || <span className="usc-muted">—</span>}</td>
+                    <td>
+                      <Pill
+                        label={user.active ? "Active" : "Suspended"}
+                        tone={user.active ? "success" : "warn"}
+                      />
+                    </td>
+                    <td className="is-actions">
+                      {user.isOperator ? (
+                        <span className="usc-muted">Managed in Traveloop</span>
+                      ) : (
+                        <Dialog
+                          label="Edit"
+                          variant="small"
+                          title={`Edit ${user.displayName || user.email}`}
+                          description={user.email}
+                          wide
+                        >
+                          <UserForm user={user} />
+                          <form className="usc-danger" action={setPasswordAction}>
                             <input type="hidden" name="userId" value={user.userId} />
-
-                            <label className="us-field">
-                              <span>Display name</span>
-                              <input name="displayName" defaultValue={user.displayName} />
-                            </label>
-
-                            <div className="us-form-row">
-                              <label className="us-field">
-                                <span>Role</span>
-                                <select name="role" defaultValue={user.role}>
-                                  {URBAN_SPRINT_ROLES.map((role) => (
-                                    <option key={role} value={role}>
-                                      {ROLE_LABEL[role]}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-
-                              <label className="us-field">
-                                <span>Team</span>
-                                <select name="teamId" defaultValue={user.teamId ?? ""}>
-                                  <option value="">No team</option>
-                                  {teams.map((team) => (
-                                    <option key={team.id} value={team.id}>
-                                      {team.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                            </div>
-
-                            <label className="us-field">
-                              <span>Phone</span>
-                              <input name="phone" defaultValue={user.phone ?? ""} />
-                            </label>
-
-                            <label className="us-check">
-                              <input type="checkbox" name="active" defaultChecked={user.active} />
-                              <span>Can sign in</span>
-                            </label>
-
-                            <button className="us-btn us-btn-primary us-btn-sm" type="submit">
-                              Save
-                            </button>
-                            <small className="us-form-note">
-                              Moving someone off gamemaster releases any team they were running;
-                              moving them off participant removes them from a squad.
-                            </small>
-                          </form>
-
-                          <form className="us-form" action={setPasswordAction}>
-                            <input type="hidden" name="userId" value={user.userId} />
-                            <label className="us-field">
+                            <label
+                              className="admin-field"
+                              style={{ flex: "1 1 220px", marginBottom: 0 }}
+                            >
                               <span>New password</span>
                               <input name="password" type="text" minLength={8} required />
                             </label>
-                            <button className="us-btn us-btn-ghost us-btn-sm" type="submit">
+                            <button className="ad-btn" type="submit">
                               Reset password
                             </button>
                           </form>
-
-                          <form action={deleteUserAction} className="us-danger">
+                          <form className="usc-danger" action={deleteUserAction}>
                             <input type="hidden" name="userId" value={user.userId} />
-                            <button className="us-btn us-btn-danger us-btn-sm" type="submit">
+                            <p>
+                              Stations they confirmed stay in the history, with their name removed.
+                              Suspending keeps the name.
+                            </p>
+                            <ConfirmButton message={`Delete ${user.email}? This can't be undone.`}>
                               Delete account
-                            </button>
-                            <small>
-                              Stations they confirmed stay in the history, with their name
-                              removed. Suspending keeps the name.
-                            </small>
+                            </ConfirmButton>
                           </form>
-                        </RowEditor>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Panel>
-      </div>
+                        </Dialog>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
     </>
+  );
+}
+
+/** New account when `user` is absent; otherwise that account's details. */
+function UserForm({ user }: { user?: UrbanSprintUser }) {
+  return (
+    <form className="usc-form" action={user ? updateUserAction : createUserAction}>
+      {user && <input type="hidden" name="userId" value={user.userId} />}
+
+      <div className="ad-field-grid">
+        {!user && (
+          <label className="admin-field">
+            <span>Email</span>
+            <input name="email" type="email" autoComplete="off" required />
+          </label>
+        )}
+        <label className="admin-field">
+          <span>Display name</span>
+          <input
+            name="displayName"
+            defaultValue={user?.displayName}
+            placeholder="Shown to their team"
+          />
+        </label>
+        {!user && (
+          <label className="admin-field">
+            <span>Temporary password</span>
+            <input name="password" type="text" minLength={8} required />
+            <small className="usc-hint">At least 8 characters.</small>
+          </label>
+        )}
+        <label className="admin-field">
+          <span>Phone</span>
+          <input name="phone" defaultValue={user?.phone ?? ""} placeholder="Optional" />
+        </label>
+      </div>
+
+      <label className="admin-field">
+        <span>Role</span>
+        <select name="role" defaultValue={user?.role ?? "gamemaster"}>
+          {URBAN_SPRINT_ROLES.map((role) => (
+            <option key={role} value={role}>
+              {ROLE_LABEL[role]}
+            </option>
+          ))}
+        </select>
+        <small className="usc-hint">Gamemasters claim their own team on race day.</small>
+      </label>
+
+      {user && (
+        <label className="ad-check">
+          <input type="checkbox" name="active" defaultChecked={user.active} />
+          <span>
+            <b>Can sign in</b>
+            Moving someone off gamemaster releases any team they were running.
+          </span>
+        </label>
+      )}
+
+      <div className="usc-form-foot">
+        <button className="ad-btn ad-btn-primary" type="submit">
+          {user ? "Save account" : "Create account"}
+        </button>
+      </div>
+    </form>
   );
 }

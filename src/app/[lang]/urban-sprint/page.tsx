@@ -3,43 +3,46 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isLocale } from "@/i18n/config";
 import { localeAlternates } from "@/i18n/metadata";
-import { getUrbanSprintSession, ROLE_HOME } from "@/lib/urban-sprint/auth";
 import { getSettings } from "@/lib/urban-sprint/settings-db";
-import { getLeaderboard } from "@/lib/urban-sprint/leaderboard-db";
-import { getCampaignStats } from "@/lib/urban-sprint/stats-db";
-import { points } from "@/lib/urban-sprint/format";
-import Leaderboard from "./_components/Leaderboard";
+import { getBoard, type ResultRow } from "@/lib/urban-sprint/results-db";
+import { formatDuration, points } from "@/lib/urban-sprint/format";
+import { RACE_MINUTES } from "@/lib/urban-sprint/race-clock";
+import FindTeam from "./_components/FindTeam";
+import GameEntrance from "./_components/GameEntrance";
 import LiveRefresh from "./_components/LiveRefresh";
-import { LivePill, StatusPill, Wordmark, statusNote } from "./_components/ui";
+import ResultsBoard from "./_components/ResultsBoard";
+import SprintNav from "./_components/SprintNav";
+import { Empty, LivePill, Wordmark } from "./_components/ui";
 
 /**
- * The public face of the campaign. No login required, and no login *implied* —
- * a spectator should be able to follow the race from a poster QR code without
- * ever seeing a form.
+ * The whole public campaign, on one page: the course, the way back in for
+ * racers who've booked, and the leaderboard.
+ *
+ * It opens like a game (GameEntrance.tsx): a loading screen, then the sky over
+ * Penang, then a fall through the clouds onto George Town while the landmarks
+ * load onto the board, ending on the playable 3D map, whose own card carries
+ * the sign-up. One scroll from the board lands on the next screen: racers who
+ * already have a Booking ID get a way to their team page, and everyone sees
+ * who they'd be racing. Everything else (times, rules, forms) lives on the
+ * booking page, one click away. The old standalone /urban-sprint/leaderboard
+ * redirects here (next.config.ts).
  */
 
-const HOW_IT_WORKS = [
-  {
-    step: "01",
-    title: "Teams assemble",
-    body: "Every team is handed to a gamemaster who runs the route with them and confirms each stop.",
-  },
-  {
-    step: "02",
-    title: "Draw a booster",
-    body: "Each team draws one booster at random. It multiplies every station in its category — and it is drawn once.",
-  },
-  {
-    step: "03",
-    title: "Sprint the city",
-    body: "Stations are real partner shops. Reach one, do what it asks, and the gamemaster confirms it on the spot.",
-  },
-  {
-    step: "04",
-    title: "Watch the board move",
-    body: "Points land the moment a station is confirmed, booster bonus included. The leaderboard reorders live.",
-  },
-];
+const SIGN_UP = "/urban-sprint/book";
+
+/**
+ * The views the board offers, capped by the console's display limit (0 = no
+ * cap). With the cap at 200 that's Top 25 / Top 200; uncapped it adds "All".
+ */
+function boardViews(limit: number): number[] {
+  const views = [25, 200].filter((size) => limit === 0 || size < limit);
+  views.push(limit);
+  return views;
+}
+
+function viewLabel(size: number): string {
+  return size === 0 ? "All teams" : `Top ${size}`;
+}
 
 /**
  * Title and description come from the layout; this adds the pair of tags the
@@ -57,169 +60,143 @@ export async function generateMetadata({
   return { alternates: localeAlternates(lang, "/urban-sprint") };
 }
 
-export default async function UrbanSprintLandingPage() {
-  const [settings, board, stats, session] = await Promise.all([
+export default async function UrbanSprintLandingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const [params, settings, board] = await Promise.all([
+    searchParams,
     getSettings(),
-    getLeaderboard(5),
-    getCampaignStats(),
-    getUrbanSprintSession(),
+    // A marketing page never errors on the board: null says "not right now"
+    // in place of the rows, and the page around it carries on.
+    getBoard().catch((error): ResultRow[] | null => {
+      console.error("[us-landing] Couldn't load results:", error);
+      return null;
+    }),
   ]);
 
-  const leader = board[0];
+  const views = boardViews(settings.leaderboardLimit);
+  const requested = Number(params.show);
+  const show = views.includes(requested) ? requested : views[0];
+  const rows = board && show > 0 ? board.slice(0, show) : board;
+  const total = board?.length ?? 0;
+  const leader = board?.[0];
 
   return (
-    <main className="us-public">
+    <main className="us-public us-landing">
       {/* The board on this page moves on its own, but nobody is acting on it
           second by second — a slower tick than the gamemaster's. */}
       <LiveRefresh revision={settings.revision} intervalMs={8000} />
 
-      <header className="us-topbar">
-        <Wordmark />
-        <nav className="us-topbar-nav" aria-label="Urban Sprint">
-          <a href="#how">How it works</a>
-          <Link href="/urban-sprint/leaderboard">Leaderboard</Link>
-        </nav>
-        {session ? (
-          <Link className="us-btn us-btn-primary us-btn-sm" href={ROLE_HOME[session.role]}>
-            Open dashboard
-          </Link>
-        ) : (
-          <Link className="us-btn us-btn-primary us-btn-sm" href="/urban-sprint/login">
-            Log in
-          </Link>
-        )}
-      </header>
+      <SprintNav live={settings.eventStatus === "live"} />
 
-      <section className="us-hero">
-        <div className="us-hero-inner">
-          <p className="us-hero-eyebrow">
-            A Traveloop campaign · {settings.eventLocation}
-          </p>
+      {/* -------------------------------------------------------- Entrance */}
+      <GameEntrance raceMinutes={RACE_MINUTES} signUpHref={SIGN_UP} />
+      {/* Without scripts there is no loader to press start on and no scroll
+          timeline to play, so the entrance is just its opening screen, and
+          the bar (which otherwise waits for the board) is up from the start. */}
+      <noscript>
+        <style>
+          {".us-boot{display:none}.us-entrance{height:auto}" +
+            ".us-landing .us-nav{translate:none!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important}"}
+        </style>
+      </noscript>
 
-          <h1 className="us-hero-title">
-            <span>Urban</span>
-            <span className="us-hero-title-out">Sprint</span>
-          </h1>
+      {/* One screen under the bar, where the scroll from the board lands:
+          the way to a team page, then the board. */}
+      <div className="us-after">
+        {/* Already booked? The Booking ID box, for racers after their team page. */}
+        <FindTeam />
 
-          <p className="us-hero-tagline">{settings.eventTagline}</p>
+        {/* ----------------------------------------------------------- Board */}
+        <section className="us-board" id="leaderboard" aria-labelledby="us-board-title">
+          <div className="us-shell">
+            <header className="us-sechead">
+              <div>
+                <p className="us-kicker is-light">
+                  Leaderboard <LivePill label="Live" />
+                </p>
+                <h2 id="us-board-title">
+                  {leader ? (
+                    <>
+                      {leader.teamName} <em>leads.</em>
+                    </>
+                  ) : (
+                    <>
+                      The board is <em>wide open.</em>
+                    </>
+                  )}
+                </h2>
+                <p className="us-sechead-note">
+                  {leader
+                    ? `${points(leader.points)} points in ${formatDuration(leader.seconds)} · ${total} ${total === 1 ? "team" : "teams"} ranked.`
+                    : "First team on the board sets the pace."}
+                </p>
+              </div>
 
-          <div className="us-hero-status">
-            <StatusPill status={settings.eventStatus} />
-            <span className="us-hero-statusnote">{statusNote(settings.eventStatus)}</span>
-          </div>
+              {views.length > 1 && total > 0 && (
+                <nav className="us-segment us-boardviews" aria-label="How many teams to show">
+                  {views.map((size) => (
+                    <Link
+                      key={size}
+                      className={`us-segment-btn${size === show ? " is-active" : ""}`}
+                      href={`/urban-sprint?show=${size}#leaderboard`}
+                      aria-current={size === show ? "page" : undefined}
+                      scroll={false}
+                    >
+                      {viewLabel(size)}
+                    </Link>
+                  ))}
+                </nav>
+              )}
+            </header>
 
-          <div className="us-hero-cta">
-            <Link className="us-btn us-btn-primary us-btn-lg" href="/urban-sprint/leaderboard">
-              View the leaderboard
+            {!rows ? (
+              <Empty title="Results aren't available right now">Please try again in a minute.</Empty>
+            ) : (
+              rows.length > 0 && <ResultsBoard rows={rows} podium />
+            )}
+
+            {/* The open row: the board's last line is the visitor's team, and
+                the score to beat is the challenge. */}
+            <Link className="us-lb-open" href={SIGN_UP}>
+              <span className="us-lb-open-rank" aria-hidden>
+                ?
+              </span>
+              <span className="us-lb-open-team">
+                <b>Your team here</b>
+                <span>
+                  {leader
+                    ? `Beat ${points(leader.points)} points and take the crown.`
+                    : "Race first and set the score to beat."}
+                </span>
+              </span>
+              <span className="us-lb-open-go">
+                <span className="us-lb-open-go-text">Book your race</span>
+                <span aria-hidden>→</span>
+              </span>
             </Link>
-            <Link className="us-btn us-btn-ghost us-btn-lg" href="/urban-sprint/login">
-              {session ? "Go to my dashboard" : "Team login"}
-            </Link>
-          </div>
 
-          <dl className="us-hero-stats">
-            <div>
-              <dt>Teams racing</dt>
-              <dd>{stats.teams}</dd>
-            </div>
-            <div>
-              <dt>Stations</dt>
-              <dd>{stats.stations}</dd>
-            </div>
-            <div>
-              <dt>Stations cleared</dt>
-              <dd>{stats.completions}</dd>
-            </div>
-            <div>
-              <dt>Points awarded</dt>
-              <dd>{points(stats.pointsAwarded)}</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div className="us-hero-grid" aria-hidden />
-      </section>
-
-      <section className="us-how" id="how">
-        <div className="us-shell">
-          <p className="us-eyebrow">How it works</p>
-          <h2 className="us-how-title">Four moves, ninety minutes, one board.</h2>
-
-          <ol className="us-steps">
-            {HOW_IT_WORKS.map((item) => (
-              <li className="us-step" key={item.step}>
-                <span className="us-step-num">{item.step}</span>
-                <h3>{item.title}</h3>
-                <p>{item.body}</p>
-              </li>
-            ))}
-          </ol>
-
-          {/* The worked example is the clearest possible statement of the
-              scoring rule, and it's the question every spectator asks first. */}
-          <div className="us-mathcard">
-            <p className="us-eyebrow">The booster, in one sum</p>
-            <div className="us-math">
-              <div className="us-math-row">
-                <span>ABC Cafe · Food &amp; Beverage</span>
-                <b>30</b>
-              </div>
-              <div className="us-math-row is-bonus">
-                <span>Food Booster · +25%</span>
-                <b>+7.5</b>
-              </div>
-              <div className="us-math-row is-total">
-                <span>Awarded</span>
-                <b>37.5</b>
-              </div>
-            </div>
-            <p className="us-math-note">
-              A booster pays out only on stations in its own category. The percentage is set per
-              booster by the organisers, so it changes between events without changing the game.
+            <p className="us-board-foot">
+              Every race is {RACE_MINUTES} minutes. Most points wins; on the same points, the faster
+              time ranks higher. Teams on the course right now are shown live.
             </p>
           </div>
-        </div>
-      </section>
-
-      <section className="us-boardsection">
-        <div className="us-shell">
-          <header className="us-sechead">
-            <div>
-              <p className="us-eyebrow">
-                Standings <LivePill />
-              </p>
-              <h2>{leader ? `${leader.name} leads` : "The board opens soon"}</h2>
-              <p className="us-sechead-note">
-                {leader
-                  ? `${points(leader.points)} points from ${leader.stationsCompleted} stations.`
-                  : "Standings appear as soon as the first station is confirmed."}
-              </p>
-            </div>
-            <div className="us-sechead-actions">
-              <Link className="us-btn us-btn-ghost" href="/urban-sprint/leaderboard">
-                Full leaderboard
-              </Link>
-            </div>
-          </header>
-
-          <Leaderboard rows={board} compact />
-
-          <Link className="us-btn us-btn-primary us-btn-block" href="/urban-sprint/leaderboard">
-            View full leaderboard
-          </Link>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <footer className="us-footer">
         <div className="us-shell us-footer-inner">
           <Wordmark />
           <p>
-            Urban Sprint is a campaign by <Link href="/">Traveloop</Link> — the tourist pass for
-            Malaysia.
+            Urban Sprint is a campaign by <Link href="/">Traveloop</Link> — the premier tourist pass
+            for Malaysia.
           </p>
           <nav aria-label="Urban Sprint footer">
-            <Link href="/urban-sprint/leaderboard">Leaderboard</Link>
-            <Link href="/urban-sprint/login">Log in</Link>
+            <Link href={SIGN_UP}>Sign up</Link>
+            <a href="#leaderboard">Leaderboard</a>
+            <Link href="/urban-sprint/login">Staff login</Link>
             <Link href="/">Traveloop</Link>
           </nav>
         </div>

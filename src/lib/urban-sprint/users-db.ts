@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { isOperatorEmail } from "@/lib/admin-auth";
 import type { UrbanSprintRole, UrbanSprintUser } from "./types";
 
 /**
@@ -10,9 +11,12 @@ import type { UrbanSprintRole, UrbanSprintUser } from "./types";
  * else the person might have. Creating one here never grants any Traveloop
  * permission — the Traveloop console is gated on ADMIN_LOGIN_EMAIL, which no
  * account created here can match.
+ *
+ * That operator account is listed here too (it is an Urban Sprint admin by
+ * right), but it is Traveloop's login: nothing on this page may change its
+ * role, password or existence, or the Traveloop console could be locked out.
  */
 
-type Membership = { team_id: number; us_teams: { name: string } | null };
 type RunningTeam = { id: number; name: string };
 
 type ProfileRow = {
@@ -22,12 +26,10 @@ type ProfileRow = {
   phone: string | null;
   active: boolean;
   created_at: string;
-  // Both embeds are at most one row per person — membership because user_id is
-  // the primary key of us_team_members, and the running team because of the
-  // one-team-per-gamemaster index. Whether PostgREST serialises a to-one
-  // relationship as an object or a single-element array depends on how it
-  // reads the constraints, so both shapes are accepted rather than guessed at.
-  us_team_members: Membership | Membership[] | null;
+  // At most one row — the one-team-per-gamemaster index — but whether
+  // PostgREST serialises a to-one relationship as an object or a
+  // single-element array depends on how it reads the constraints, so both
+  // shapes are accepted rather than guessed at.
   running: RunningTeam | RunningTeam[] | null;
 };
 
@@ -37,7 +39,6 @@ function one<T>(value: T | T[] | null | undefined): T | null {
 }
 
 const SELECT = `user_id, role, display_name, phone, active, created_at,
-  us_team_members(team_id, us_teams(name)),
   running:us_teams!us_teams_gamemaster_id_fkey(id, name)`;
 
 /**
@@ -65,11 +66,7 @@ export async function listUrbanSprintUsers(): Promise<UrbanSprintUser[]> {
   if (error) throw new Error(error.message);
 
   return (data as unknown as ProfileRow[]).map((row) => {
-    // A gamemaster's team is the one they claimed; a participant's is the one
-    // they were assigned to. Both surface in the same column in the admin
-    // table, so they're resolved to a single pair here.
     const running = one(row.running);
-    const member = one(row.us_team_members);
 
     return {
       userId: row.user_id,
@@ -79,8 +76,9 @@ export async function listUrbanSprintUsers(): Promise<UrbanSprintUser[]> {
       phone: row.phone,
       active: row.active,
       createdAt: row.created_at,
-      teamId: running?.id ?? member?.team_id ?? null,
-      teamName: running?.name ?? member?.us_teams?.name ?? null,
+      teamId: running?.id ?? null,
+      teamName: running?.name ?? null,
+      isOperator: isOperatorEmail(emails.get(row.user_id)),
     };
   });
 }
@@ -91,7 +89,6 @@ export async function countUsersByRole(): Promise<Record<UrbanSprintRole, number
   const counts: Record<UrbanSprintRole, number> = {
     admin: 0,
     gamemaster: 0,
-    participant: 0,
   };
 
   for (const row of data ?? []) {
@@ -148,6 +145,14 @@ export async function createUrbanSprintUser(input: {
   return { ok: true, userId: data.user.id };
 }
 
+/** Refuses any change to the Traveloop operator's account from this console. */
+async function assertNotOperator(userId: string): Promise<void> {
+  const { data } = await getSupabase().auth.admin.getUserById(userId);
+  if (isOperatorEmail(data.user?.email)) {
+    throw new Error("That's the Traveloop admin login. Manage it from the Traveloop console instead.");
+  }
+}
+
 export async function updateUrbanSprintUser(
   userId: string,
   patch: {
@@ -157,6 +162,8 @@ export async function updateUrbanSprintUser(
     active?: boolean;
   }
 ): Promise<void> {
+  await assertNotOperator(userId);
+
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (patch.role !== undefined) row.role = patch.role;
   if (patch.displayName !== undefined) row.display_name = patch.displayName;
@@ -172,26 +179,38 @@ export async function updateUrbanSprintUser(
   if (patch.role !== undefined && patch.role !== "gamemaster") {
     await db.from("us_teams").update({ gamemaster_id: null, claimed_at: null }).eq("gamemaster_id", userId);
   }
-
-  // Likewise a non-participant should not sit on a team roster.
-  if (patch.role !== undefined && patch.role !== "participant") {
-    await db.from("us_team_members").delete().eq("user_id", userId);
-  }
 }
 
 export async function setUserPassword(userId: string, password: string): Promise<void> {
+  await assertNotOperator(userId);
   const { error } = await getSupabase().auth.admin.updateUserById(userId, { password });
   if (error) throw new Error(error.message);
 }
 
 /**
- * Removes the Auth account, which cascades to the profile and from there to
- * team membership. Completions keep their row — gamemaster_id is set null —
- * so deleting a person never rewrites the score history they created.
+ * Removes the profile, then the Auth account. Deleting the profile cascades to
+ * team membership, and completions keep their row — gamemaster_id is set null
+ * — so deleting a person never rewrites the score history they created.
+ *
+ * The profile goes first, from here, rather than by cascade from the Auth
+ * delete: Supabase runs that delete as its own auth role, and the cascade into
+ * the us_ tables fails there ("Database error deleting user"), so the console's
+ * Delete button never worked. If the Auth delete still fails afterwards, the
+ * person has already lost all Urban Sprint access, and the error says so.
  */
 export async function deleteUrbanSprintUser(userId: string): Promise<void> {
-  const { error } = await getSupabase().auth.admin.deleteUser(userId);
-  if (error) throw new Error(error.message);
+  await assertNotOperator(userId);
+  const db = getSupabase();
+
+  const { error: profileError } = await db.from("us_profiles").delete().eq("user_id", userId);
+  if (profileError) throw new Error(`Couldn't remove their Urban Sprint profile: ${profileError.message}`);
+
+  const { error } = await db.auth.admin.deleteUser(userId);
+  if (error) {
+    throw new Error(
+      `Their Urban Sprint access is removed, but the login itself couldn't be deleted: ${error.message}`
+    );
+  }
 }
 
 export async function getUrbanSprintUser(userId: string): Promise<UrbanSprintUser | null> {

@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/app/components/Icons";
+import ConsoleSwitch from "./ConsoleSwitch";
 
 type NavItem = { href: string; label: string; icon: string; count?: number };
 
@@ -76,7 +77,7 @@ export default function AdminShell({ children, signOut, adminEmail, counts }: Ad
           <Link className="admin-rail-logo" href="/admin" aria-label="Traveloop admin home">
             <Image src="/traveloop-logo.webp" alt="Traveloop" width={1280} height={345} priority />
           </Link>
-          <span className="admin-rail-badge">Operations</span>
+          <ConsoleSwitch current="traveloop" />
         </div>
 
         <p className="admin-rail-section">Manage</p>

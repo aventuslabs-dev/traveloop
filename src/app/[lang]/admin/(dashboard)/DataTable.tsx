@@ -14,8 +14,16 @@ import type { PillTone } from "./ui";
  * markup (a form in a row, say) renders its own table with the same classes.
  */
 export type Cell =
-  | { kind: "text"; value: string; strong?: boolean }
-  | { kind: "stack"; primary: string; secondary?: string }
+  | { kind: "text"; value: string; strong?: boolean; sortValue?: string | number }
+  | {
+      kind: "stack";
+      primary: string;
+      secondary?: string;
+      /** Makes the primary line a link, e.g. to the row's detail page. */
+      href?: string;
+      /** Sorts by this rather than the displayed text (a date shown as "Wed, 30 Sept"). */
+      sortValue?: string | number;
+    }
   | { kind: "pill"; label: string; tone: PillTone }
   | { kind: "tier"; label: string }
   | { kind: "mono"; value: string; truncate?: boolean }
@@ -58,6 +66,9 @@ function cellText(cell: Cell | undefined): string {
 
 function cellSortValue(cell: Cell | undefined): string | number {
   if (cell?.kind === "num") return cell.value;
+  if ((cell?.kind === "text" || cell?.kind === "stack") && cell.sortValue !== undefined) {
+    return cell.sortValue;
+  }
   return cellText(cell).toLowerCase();
 }
 
@@ -70,7 +81,13 @@ function CellView({ cell }: { cell: Cell | undefined }) {
     case "stack":
       return (
         <span className="ad-cell-stack">
-          <b>{cell.primary || "—"}</b>
+          {cell.href ? (
+            <Link className="ad-link" href={cell.href}>
+              {cell.primary || "—"}
+            </Link>
+          ) : (
+            <b>{cell.primary || "—"}</b>
+          )}
           {cell.secondary && <span>{cell.secondary}</span>}
         </span>
       );

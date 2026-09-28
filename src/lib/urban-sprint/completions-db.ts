@@ -150,12 +150,13 @@ export async function listCompletionsForTeam(
  * reason attached, the trigger drops its points from the team's total, and the
  * partial unique index releases so the station can legitimately be re-scored.
  */
+/** Returns the team it belonged to, or null when it was already void. */
 export async function voidCompletion(
   id: number,
   adminId: string,
   reason: string
-): Promise<void> {
-  const { error } = await getSupabase()
+): Promise<number | null> {
+  const { data, error } = await getSupabase()
     .from("us_completions")
     .update({
       status: "void",
@@ -164,9 +165,12 @@ export async function voidCompletion(
       void_reason: reason || "Voided by administrator",
     })
     .eq("id", id)
-    .eq("status", "valid");
+    .eq("status", "valid")
+    .select("team_id")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
+  return data ? (data.team_id as number) : null;
 }
 
 /** Totals for the admin overview, in one round trip each. */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/app/components/Icons";
 import { percent, points } from "@/lib/urban-sprint/format";
 import type { Category, StationForTeam } from "@/lib/urban-sprint/types";
@@ -10,6 +10,7 @@ import {
   type CompleteState,
   type QuickStationState,
 } from "../actions";
+import { useSheet } from "../../_components/useSheet";
 
 /**
  * The station list and the confirm-a-completion flow.
@@ -44,6 +45,7 @@ export default function StationBoard({
   boosterName,
   boosterCategory,
   bonusPercent,
+  locked,
 }: {
   stations: StationForTeam[];
   categories: Category[];
@@ -51,6 +53,8 @@ export default function StationBoard({
   boosterName: string;
   boosterCategory: string;
   bonusPercent: number;
+  /** Why stations can't be confirmed right now (race not started, or over); null while racing. */
+  locked: string | null;
 }) {
   const [filter, setFilter] = useState<Filter>("todo");
   const [query, setQuery] = useState("");
@@ -248,6 +252,7 @@ export default function StationBoard({
           error={completeState.status === "error" ? completeState.message : null}
           formAction={completeAction}
           onClose={() => setOpenStationId(null)}
+          locked={locked}
         />
       )}
 
@@ -293,6 +298,7 @@ function ConfirmSheet({
   error,
   formAction,
   onClose,
+  locked,
 }: {
   station: StationForTeam;
   boosterName: string;
@@ -300,12 +306,28 @@ function ConfirmSheet({
   error: string | null;
   formAction: (formData: FormData) => void;
   onClose: () => void;
+  locked: string | null;
 }) {
+  const sheet = useRef<HTMLDivElement>(null);
+  // No closing mid-confirm: the result has to land on this sheet.
+  useSheet(sheet, pending ? null : onClose);
+
   return (
     <div className="us-sheet-wrap" role="dialog" aria-modal="true" aria-label={`Complete ${station.name}`}>
-      <button className="us-sheet-scrim" type="button" aria-label="Cancel" onClick={onClose} />
+      <button
+        className="us-sheet-scrim"
+        type="button"
+        aria-label="Cancel"
+        tabIndex={-1}
+        onClick={pending ? undefined : onClose}
+      />
 
-      <div className="us-sheet" style={{ "--cat": station.categoryColor } as React.CSSProperties}>
+      <div
+        className="us-sheet"
+        ref={sheet}
+        tabIndex={-1}
+        style={{ "--cat": station.categoryColor } as React.CSSProperties}
+      >
         <div className="us-sheet-grab" aria-hidden />
 
         <p className="us-eyebrow">Confirm completion</p>
@@ -353,8 +375,8 @@ function ConfirmSheet({
           <button className="us-btn us-btn-ghost" type="button" onClick={onClose} disabled={pending}>
             Cancel
           </button>
-          <button className="us-btn us-btn-primary us-btn-lg" type="submit" disabled={pending}>
-            {pending ? "Confirming…" : "Confirm completion"}
+          <button className="us-btn us-btn-primary us-btn-lg" type="submit" disabled={pending || locked !== null}>
+            {locked ?? (pending ? "Confirming…" : "Confirm completion")}
           </button>
         </form>
       </div>
@@ -382,12 +404,20 @@ function AddStationSheet({
     createStationAction,
     { status: "idle" }
   );
+  const sheet = useRef<HTMLDivElement>(null);
+  useSheet(sheet, pending ? null : onClose);
 
   return (
     <div className="us-sheet-wrap" role="dialog" aria-modal="true" aria-label="Add a station">
-      <button className="us-sheet-scrim" type="button" aria-label="Close" onClick={onClose} />
+      <button
+        className="us-sheet-scrim"
+        type="button"
+        aria-label="Close"
+        tabIndex={-1}
+        onClick={pending ? undefined : onClose}
+      />
 
-      <div className="us-sheet">
+      <div className="us-sheet" ref={sheet} tabIndex={-1}>
         <div className="us-sheet-grab" aria-hidden />
 
         {state.status === "ok" ? (

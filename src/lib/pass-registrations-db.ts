@@ -189,20 +189,30 @@ export async function getPassRegistrationsByOrders(
   if (sessionIds.length === 0) return [];
 
   const db = getSupabase();
+  const rows: PassRegistrationRow[] = [];
 
-  const { data, error } = await db
-    .from("pass_registrations")
-    .select()
-    .in("order_session_id", sessionIds)
-    .order("id", { ascending: true })
-    .returns<PassRegistrationRow[]>();
+  // The ids travel in the request URL, and a Stripe session id is ~66
+  // characters: an Urban Sprint console listing hundreds of teams would
+  // otherwise overrun what the gateway accepts.
+  for (let start = 0; start < sessionIds.length; start += SESSION_ID_CHUNK) {
+    const chunk = sessionIds.slice(start, start + SESSION_ID_CHUNK);
+    const { data, error } = await db
+      .from("pass_registrations")
+      .select()
+      .in("order_session_id", chunk)
+      .order("id", { ascending: true })
+      .returns<PassRegistrationRow[]>();
 
-  if (error) {
-    throw new Error(`Failed to list pass registrations for ${sessionIds.length} orders: ${error.message}`);
+    if (error) {
+      throw new Error(`Failed to list pass registrations for ${sessionIds.length} orders: ${error.message}`);
+    }
+    rows.push(...(data ?? []));
   }
 
-  return (data ?? []).map(toStoredPassRegistration);
+  return rows.sort((a, b) => a.id - b.id).map(toStoredPassRegistration);
 }
+
+const SESSION_ID_CHUNK = 100;
 
 /* ------------------------------------------------------------------ */
 /* Pass tracking (admin)                                               */

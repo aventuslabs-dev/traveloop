@@ -441,3 +441,23 @@ create index if not exists orders_discount_idx on orders (discount_id) where dis
 -- for passes sold before discounts existed, whose unit_amount_cents already
 -- is the whole story.
 alter table pass_registrations add column if not exists list_amount_cents integer;
+
+-- What an order bought. Two products go through the same order, pass and
+-- account pipeline:
+--
+--   pass          — Premier Passes from /passes (Silver, Gold, Platinum).
+--   urban_sprint  — an Urban Sprint team entry (us_bookings). The team price
+--                   includes a Platinum Pass for every racer, so the order
+--                   carries one pass_registrations row per participant, at
+--                   0 each, and the entry fee is the order's only charge.
+--
+-- product_reference is the Urban Sprint Booking ID ("US-ABCD1234") and
+-- product_description reads like "The Night Owls · Sat, 3 Oct 2026, 9:00 AM",
+-- written at purchase so the invoice doesn't depend on the booking row.
+alter table orders add column if not exists product text not null default 'pass'
+  check (product in ('pass', 'urban_sprint'));
+alter table orders add column if not exists product_reference text;
+alter table orders add column if not exists product_description text;
+
+create index if not exists orders_product_reference_idx
+  on orders (product_reference) where product_reference is not null;

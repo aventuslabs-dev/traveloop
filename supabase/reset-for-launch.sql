@@ -36,6 +36,7 @@ union all select 'checkout_drafts',      count(*) from checkout_drafts
 union all select 'customer_profiles',    count(*) from customer_profiles
 union all select 'auth.users (total)',   count(*) from auth.users
 union all select 'urban sprint profiles', count(*) from us_profiles
+union all select 'urban sprint bookings', count(*) from us_bookings
 order by table_name;
 
 -- The account that will be kept. Zero rows here means STEP 1 will abort.
@@ -207,6 +208,8 @@ select id, email from auth.users;
 
 begin;
 
+-- Team bookings made while testing. Participants cascade with them.
+delete from us_bookings;
 delete from us_completions;
 delete from us_team_members;
 delete from us_teams;
@@ -224,5 +227,6 @@ union all select 'us_stations',         count(*) from us_stations
 union all select 'us_boosters',         count(*) from us_boosters
 union all select 'us_categories',       count(*) from us_categories
 union all select 'us_profiles',         count(*) from us_profiles
+union all select 'us_bookings',         count(*) from us_bookings
 union all select 'us_settings (keep 1)', count(*) from us_settings
 order by table_name;

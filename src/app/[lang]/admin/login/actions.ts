@@ -1,9 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { isOperatorEmail, loginEmailFor } from "@/lib/admin-auth";
 import { createClient } from "@/lib/supabase/server";
-
-const ADMIN_ID = "admin";
 
 export async function login(formData: FormData) {
   const id = String(formData.get("id") ?? "").trim();
@@ -14,7 +13,8 @@ export async function login(formData: FormData) {
     throw new Error("ADMIN_LOGIN_EMAIL must be set.");
   }
 
-  if (id !== ADMIN_ID || !password) {
+  // "admin", or the operator's email in full. Nobody else signs in here.
+  if (!isOperatorEmail(loginEmailFor(id)) || !password) {
     redirect("/admin/login?error=1");
   }
 

@@ -12,7 +12,7 @@ import type { Tab } from "./TabBar";
 
 export function gamemasterTabs(stationsRemaining?: number): Tab[] {
   return [
-    { href: "/urban-sprint/gamemaster", label: "Team", icon: "shield" },
+    { href: "/urban-sprint/gamemaster", label: "Team", icon: "shield", exact: true },
     {
       href: "/urban-sprint/gamemaster/stations",
       label: "Stations",
@@ -24,15 +24,19 @@ export function gamemasterTabs(stationsRemaining?: number): Tab[] {
 }
 
 /**
- * "Shops" rather than "Stations": participants are being sent to real
- * businesses, and that is the word that makes sense on the street. Organisers
- * and gamemasters keep saying "stations", which is the game's own term.
+ * A team's link page. Every href carries the team's token, so the bar never
+ * leads out of the team's own pages.
  *
- * It sits in the middle and raised, because deciding where to walk next is the
- * thing a participant opens their phone to do.
+ * "Shops" rather than "Stations": racers are being sent to real businesses,
+ * and that is the word that makes sense on the street. Organisers and
+ * gamemasters keep saying "stations", which is the game's own term. It sits
+ * in the middle and raised, because deciding where to walk next is the thing
+ * a racer opens their phone to do.
  */
-export const PARTICIPANT_TABS: Tab[] = [
-  { href: "/urban-sprint/team", label: "My team", icon: "shield" },
-  { href: "/urban-sprint/team/shops", label: "Shops", icon: "store", prominent: true },
-  { href: "/urban-sprint/team/leaderboard", label: "Board", icon: "table" },
-];
+export function teamLinkTabs(base: string): Tab[] {
+  return [
+    { href: base, label: "My team", icon: "shield", exact: true },
+    { href: `${base}/shops`, label: "Shops", icon: "store", prominent: true },
+    { href: `${base}/leaderboard`, label: "Board", icon: "table" },
+  ];
+}

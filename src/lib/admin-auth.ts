@@ -20,5 +20,30 @@ export async function isAdminUser(
           await supabase.auth.getUser()
         ).data.user;
 
-  return Boolean(resolvedUser && resolvedUser.email === process.env.ADMIN_LOGIN_EMAIL);
+  return isOperatorEmail(resolvedUser?.email);
+}
+
+/**
+ * The ID typed on either console's login form in place of the operator's
+ * email. The operator signs in once and holds both consoles: Traveloop's, and
+ * Urban Sprint's as an Urban Sprint admin (see lib/urban-sprint/auth.ts).
+ */
+export const ADMIN_LOGIN_ID = "admin";
+
+/** True for the operator's own account — ADMIN_LOGIN_EMAIL, compared without case. */
+export function isOperatorEmail(email: string | null | undefined): boolean {
+  const adminEmail = process.env.ADMIN_LOGIN_EMAIL;
+  return Boolean(adminEmail && email && email.toLowerCase() === adminEmail.toLowerCase());
+}
+
+/**
+ * The email to sign in with for what was typed in a login form's ID box:
+ * "admin" (or the operator's email itself) means the operator; anything else
+ * is taken as typed.
+ */
+export function loginEmailFor(typed: string): string {
+  const adminEmail = process.env.ADMIN_LOGIN_EMAIL;
+  const value = typed.trim();
+  if (adminEmail && value.toLowerCase() === ADMIN_LOGIN_ID) return adminEmail;
+  return value;
 }

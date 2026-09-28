@@ -68,11 +68,12 @@ async function listAllAuthUsers(): Promise<AuthUser[]> {
 export async function listCustomerAccounts(): Promise<CustomerAccount[]> {
   const db = getSupabase();
 
-  const [users, profiles, orders, bookings] = await Promise.all([
+  const [users, profiles, orders, bookings, sprintProfiles] = await Promise.all([
     listAllAuthUsers(),
     db.from("customer_profiles").select("user_id, full_name, nationality"),
     db.from("orders").select("user_id").not("user_id", "is", null),
     db.from("experience_bookings").select("user_id"),
+    db.from("us_profiles").select("user_id"),
   ]);
 
   for (const [label, result] of [
@@ -98,8 +99,22 @@ export async function listCustomerAccounts(): Promise<CustomerAccount[]> {
   const orderCounts = tally(orders.data as { user_id: string | null }[] | null);
   const bookingCounts = tally(bookings.data as { user_id: string | null }[] | null);
 
+  // Urban Sprint accounts live in the same auth.users table. One that has never
+  // touched Traveloop (no profile, order or booking) is staff or a player, not
+  // a customer. A missing us_ table just means the extension isn't installed.
+  if (sprintProfiles.error) {
+    console.error("[admin] Could not load us_profiles:", sprintProfiles.error.message);
+  }
+  const sprintOnly = new Set(
+    (sprintProfiles.data ?? [])
+      .map((p) => p.user_id as string)
+      .filter(
+        (id) => !profileByUser.has(id) && !orderCounts.has(id) && !bookingCounts.has(id)
+      )
+  );
+
   return users
-    .filter((user) => !isAdminEmail(user.email))
+    .filter((user) => !isAdminEmail(user.email) && !sprintOnly.has(user.id))
     .map((user) => ({
       userId: user.id,
       email: user.email ?? "—",

@@ -1,23 +1,78 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ordinal, percent, points } from "@/lib/urban-sprint/format";
 import type { EventStatus } from "@/lib/urban-sprint/types";
+
+/** The logo for dark grounds: its navy letters white, its batik V and aeroplane untouched. */
+const LOGO_ON_DARK = "/traveloop-logo-white.webp";
 
 /* Presentational primitives for Urban Sprint. All server-safe, so pages stay
    Server Components and the only client code in the product is the handful of
    pieces that genuinely need interaction. */
 
-/** The logotype. Two weights of one word — the sprint is in the letterspacing. */
-export function Wordmark({ href = "/urban-sprint" }: { href?: string }) {
+/**
+ * The campaign lockup: the Traveloop logo in front, URBAN SPRINT behind it.
+ *
+ * The campaign exists to sell the pass, so the brand leads and the event sits
+ * underneath: a single filled line tucked under the logo, for bars and
+ * footers. (The landing page's poster carries its own, larger lockup.)
+ *
+ * `tone` follows the ground: on navy the letters go white and the batik V
+ * and aeroplane keep their colours (LOGO_ON_DARK); on cream it is the logo
+ * as it comes.
+ */
+export function Wordmark({
+  href = "/urban-sprint",
+  tone = "dark",
+  label = "Traveloop Urban Sprint home",
+}: {
+  href?: string;
+  tone?: "dark" | "light";
+  label?: string;
+}) {
+  const className = `us-lockup us-lockup-sm is-${tone}`;
+  const body = (
+    <>
+      <span className="us-lockup-back" aria-hidden>
+        Urban Sprint
+      </span>
+      <Image
+        className="us-lockup-logo"
+        src={tone === "dark" ? LOGO_ON_DARK : "/traveloop-logo.webp"}
+        alt=""
+        width={1280}
+        height={345}
+        sizes="150px"
+      />
+    </>
+  );
+
   return (
-    <Link className="us-wordmark" href={href} aria-label="Urban Sprint home">
-      <span className="us-wordmark-mark" aria-hidden>
-        US
-      </span>
-      <span className="us-wordmark-text">
-        <b>Urban</b>
-        <i>Sprint</i>
-      </span>
+    <Link className={className} href={href} aria-label={label}>
+      {body}
     </Link>
+  );
+}
+
+/**
+ * The same lockup at poster size, for the entrance's sky and its loading
+ * screen. Not a link, and hidden from assistive tech: the heading or dialog
+ * around it names the campaign in words.
+ */
+export function LockupLarge() {
+  return (
+    <span className="us-lockup us-lockup-lg is-dark" aria-hidden>
+      <span className="us-lockup-back">Urban Sprint</span>
+      <Image
+        className="us-lockup-logo"
+        src={LOGO_ON_DARK}
+        alt=""
+        width={1280}
+        height={345}
+        sizes="(min-width: 1024px) 700px, 70vw"
+        loading="eager"
+      />
+    </span>
   );
 }
 

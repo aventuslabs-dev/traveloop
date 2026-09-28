@@ -2,9 +2,10 @@ import { getActivityCounts, listActivity } from "@/lib/urban-sprint/completions-
 import { getSettings } from "@/lib/urban-sprint/settings-db";
 import { dayTime, percent, points, timeAgo } from "@/lib/urban-sprint/format";
 import LiveRefresh from "../../_components/LiveRefresh";
-import { LivePill } from "../../_components/ui";
 import { voidCompletionAction } from "../actions";
-import { AdminFlash, AdminHead, Panel, RowEditor } from "../ui";
+import ConfirmButton from "../ConfirmButton";
+import Dialog from "../Dialog";
+import { AdminFlash, EmptyState, LiveBadge, PageHeader, Panel, Pill, StatGrid, Swatch } from "../ui";
 
 /**
  * The score ledger, newest first.
@@ -26,107 +27,120 @@ export default async function AdminActivityPage({
     getSettings(),
   ]);
 
+  const boosted = feed.filter((row) => row.status === "valid" && row.boosterApplied).length;
+
   return (
     <>
       <LiveRefresh revision={settings.revision} intervalMs={5000} />
 
-      <AdminHead
+      <PageHeader
         title="Activity"
-        note={`${counts.valid} valid completion${counts.valid === 1 ? "" : "s"}${
-          counts.voided > 0 ? `, ${counts.voided} voided` : ""
-        }. Nothing here is ever deleted.`}
+        subtitle="Every station a gamemaster confirmed, with the arithmetic behind it. Nothing here is ever deleted."
       />
 
       <AdminFlash params={params} />
 
-      <Panel title="Score history" count={feed.length} actions={<LivePill />} flush>
+      <StatGrid
+        stats={[
+          { label: "Valid completions", value: counts.valid },
+          { label: "Voided", value: counts.voided },
+          { label: "Boosted", value: boosted, note: "in the latest 200" },
+        ]}
+      />
+
+      <Panel title="Score history" icon="clock" count={String(feed.length)} padded={false} actions={<LiveBadge />}>
         {feed.length === 0 ? (
-          <p className="us-panel-empty">No stations have been confirmed yet.</p>
+          <EmptyState icon="clock" title="Nothing confirmed yet">
+            Completions appear here the moment a gamemaster confirms a station.
+          </EmptyState>
         ) : (
-          <div className="us-tablewrap">
-            <table className="us-table">
+          <div className="ad-table-scroll">
+            <table className="ad-table">
               <thead>
                 <tr>
                   <th>When</th>
                   <th>Team</th>
                   <th>Station</th>
                   <th>Confirmed by</th>
-                  <th>Base</th>
+                  <th className="is-num">Base</th>
                   <th>Booster</th>
-                  <th>Total</th>
+                  <th className="is-num">Total</th>
                   <th>Status</th>
-                  <th aria-label="Actions" />
+                  <th className="is-num" aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>
                 {feed.map((row) => (
-                  <tr key={row.id} className={row.status === "void" ? "is-voidrow" : undefined}>
+                  <tr key={row.id} className={row.status === "void" ? "is-void" : undefined}>
                     <td>
-                      <span className="us-tablename">{timeAgo(row.createdAt)}</span>
-                      <span className="us-tablesub">{dayTime(row.createdAt)}</span>
+                      <span className="ad-cell-stack">
+                        <b>{timeAgo(row.createdAt)}</b>
+                        <span>{dayTime(row.createdAt)}</span>
+                      </span>
                     </td>
-
                     <td>
-                      <span className="us-teamdot" style={{ background: row.teamColor }} aria-hidden />
-                      {row.teamName}
+                      <span className="usc-name">
+                        <Swatch color={row.teamColor} />
+                        {row.teamName}
+                      </span>
                     </td>
-
                     <td>
-                      <span className="us-tablename">{row.stationName}</span>
-                      <span className="us-tablesub">{row.categoryName}</span>
+                      <span className="ad-cell-stack">
+                        <b>{row.stationName}</b>
+                        <span>{row.categoryName}</span>
+                      </span>
                     </td>
-
                     <td>{row.gamemasterName}</td>
-                    <td>{points(row.basePoints)}</td>
-
+                    <td className="is-num">{points(row.basePoints)}</td>
                     <td>
                       {row.boosterApplied ? (
-                        <>
-                          <span className="us-tablename">+{points(row.bonusPoints)}</span>
-                          <span className="us-tablesub">
+                        <span className="ad-cell-stack">
+                          <b className="usc-points is-boost">+{points(row.bonusPoints)}</b>
+                          <span>
                             {row.boosterName} +{percent(row.bonusPercent)}
                           </span>
-                        </>
+                        </span>
                       ) : (
-                        <span className="us-dim">—</span>
+                        <span className="usc-muted">—</span>
                       )}
                     </td>
-
-                    <td className="us-strong">{points(row.totalPoints)}</td>
-
-                    <td>
-                      <span className={`us-pill us-pill-${row.status === "valid" ? "ok" : "danger"}`}>
-                        {row.status === "valid" ? "Valid" : "Void"}
-                      </span>
-                      {row.voidReason && <span className="us-tablesub">{row.voidReason}</span>}
+                    <td className="is-num">
+                      <span className="usc-points">{points(row.totalPoints)}</span>
                     </td>
-
-                    <td className="us-table-actions">
+                    <td>
                       {row.status === "valid" ? (
-                        <RowEditor label="Void">
-                          <form className="us-form" action={voidCompletionAction}>
-                            <input type="hidden" name="id" value={row.id} />
-
-                            <label className="us-field">
-                              <span>Reason</span>
-                              <input
-                                name="reason"
-                                placeholder="Confirmed at the wrong station"
-                                required
-                              />
-                              <small>
-                                Removes {points(row.totalPoints)} from {row.teamName}. The record
-                                stays, and the station becomes completable again.
-                              </small>
-                            </label>
-
-                            <button className="us-btn us-btn-danger us-btn-sm" type="submit">
-                              Void this completion
-                            </button>
-                          </form>
-                        </RowEditor>
+                        <Pill label="Valid" tone="success" />
                       ) : (
-                        <span className="us-dim">Voided</span>
+                        <span className="ad-cell-stack">
+                          <Pill label="Void" tone="danger" />
+                          {row.voidReason && <span>{row.voidReason}</span>}
+                        </span>
+                      )}
+                    </td>
+                    <td className="is-actions">
+                      {row.status === "valid" && (
+                        <Dialog
+                          label="Void"
+                          variant="small"
+                          title={`Void ${row.teamName} → ${row.stationName}`}
+                          description={`Removes ${points(row.totalPoints)} points from ${row.teamName}. The record stays, and the station becomes completable again.`}
+                        >
+                          <form className="usc-form" action={voidCompletionAction}>
+                            <input type="hidden" name="id" value={row.id} />
+                            <label className="admin-field">
+                              <span>Reason</span>
+                              <input name="reason" placeholder="Confirmed at the wrong station" required />
+                            </label>
+                            <div className="usc-form-foot">
+                              <ConfirmButton
+                                className="ad-btn ad-btn-danger"
+                                message={`Void this completion and remove ${points(row.totalPoints)} points from ${row.teamName}?`}
+                              >
+                                Void completion
+                              </ConfirmButton>
+                            </div>
+                          </form>
+                        </Dialog>
                       )}
                     </td>
                   </tr>

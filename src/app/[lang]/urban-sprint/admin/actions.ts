@@ -11,21 +11,28 @@ import {
 import { createBooster, deleteBooster, updateBooster } from "@/lib/urban-sprint/boosters-db";
 import { createStation, deleteStation, updateStation } from "@/lib/urban-sprint/stations-db";
 import {
-  assignParticipantToTeam,
   createTeam,
   deleteTeam,
   releaseTeam,
   updateTeam,
 } from "@/lib/urban-sprint/teams-db";
 import { voidCompletion } from "@/lib/urban-sprint/completions-db";
+import { recordRaceResult } from "@/lib/urban-sprint/race-db";
 import { updateSettings } from "@/lib/urban-sprint/settings-db";
+import {
+  clearBookingResult,
+  getBookingByReference,
+  setBookingResult,
+} from "@/lib/urban-sprint/bookings-db";
+import { normalizeBookingId } from "@/lib/urban-sprint/booking-config";
+import { parseDuration } from "@/lib/urban-sprint/format";
 import {
   createUrbanSprintUser,
   deleteUrbanSprintUser,
   setUserPassword,
   updateUrbanSprintUser,
 } from "@/lib/urban-sprint/users-db";
-import type { EventStatus, UrbanSprintRole } from "@/lib/urban-sprint/types";
+import { URBAN_SPRINT_ROLES, type EventStatus, type UrbanSprintRole } from "@/lib/urban-sprint/types";
 
 /**
  * Admin mutations.
@@ -40,11 +47,14 @@ import type { EventStatus, UrbanSprintRole } from "@/lib/urban-sprint/types";
  */
 
 const ADMIN = "/urban-sprint/admin";
+const SETTINGS = `${ADMIN}/settings`;
 
 /** Refreshes every surface a change can be visible in. */
 function revalidateAll() {
   for (const path of [
     ADMIN,
+    `${ADMIN}/bookings`,
+    `${ADMIN}/results`,
     `${ADMIN}/users`,
     `${ADMIN}/teams`,
     `${ADMIN}/stations`,
@@ -52,21 +62,39 @@ function revalidateAll() {
     `${ADMIN}/boosters`,
     `${ADMIN}/activity`,
     `${ADMIN}/leaderboard`,
+    SETTINGS,
     "/urban-sprint",
-    "/urban-sprint/leaderboard",
     "/urban-sprint/gamemaster",
     "/urban-sprint/gamemaster/stations",
     "/urban-sprint/gamemaster/leaderboard",
-    "/urban-sprint/team",
-    "/urban-sprint/team/shops",
-    "/urban-sprint/team/leaderboard",
   ]) {
     revalidatePath(path);
   }
 }
 
 function back(path: string, message: string, tone: "ok" | "err" = "ok"): never {
-  redirect(`${path}?tone=${tone}&msg=${encodeURIComponent(message)}`);
+  // A path may carry its own query (a search being worked through); the
+  // flash joins it rather than replacing it.
+  const url = new URL(path, "http://console.local");
+  url.searchParams.set("tone", tone);
+  url.searchParams.set("msg", message);
+  redirect(`${url.pathname}${url.search}`);
+}
+
+/**
+ * Where a form asked to be sent back to. Only somewhere inside this console
+ * — a posted value is not trusted to name an arbitrary destination — and
+ * without the previous flash, which back() is about to replace.
+ */
+function returnPath(formData: FormData, fallback: string): string {
+  const raw = String(formData.get("returnTo") ?? "");
+  if (!raw.startsWith(`${ADMIN}/`) && raw !== ADMIN) return fallback;
+  if (raw.includes("//") || raw.includes("\\")) return fallback;
+
+  const url = new URL(raw, "http://console.local");
+  url.searchParams.delete("tone");
+  url.searchParams.delete("msg");
+  return `${url.pathname}${url.search}`;
 }
 
 /**
@@ -133,11 +161,11 @@ function checked(formData: FormData, key: string): boolean {
 
 export async function updateSettingsAction(formData: FormData) {
   await requireRole("admin");
-  const { defaultBasePoints } = numbers(ADMIN, {
+  const { defaultBasePoints } = numbers(SETTINGS, {
     defaultBasePoints: number(formData, "defaultBasePoints"),
   });
 
-  return run(ADMIN, "Campaign settings saved.", () =>
+  return run(SETTINGS, "Event settings saved.", () =>
     updateSettings({
       eventName: text(formData, "eventName"),
       eventTagline: text(formData, "eventTagline"),
@@ -340,15 +368,23 @@ export async function releaseTeamAction(formData: FormData) {
 
 /* ---------------------------------- Users ---------------------------------- */
 
+/** Only the roles that sign in; racers follow their team from its link instead. */
+function roleFrom(formData: FormData, path: string): UrbanSprintRole {
+  const role = text(formData, "role");
+  if (!(URBAN_SPRINT_ROLES as readonly string[]).includes(role)) {
+    back(path, "Choose admin or gamemaster.", "err");
+  }
+  return role as UrbanSprintRole;
+}
+
 export async function createUserAction(formData: FormData) {
   await requireRole("admin");
   const path = `${ADMIN}/users`;
 
   const email = text(formData, "email");
   const password = text(formData, "password");
-  const role = text(formData, "role") as UrbanSprintRole;
+  const role = roleFrom(formData, path);
   const displayName = text(formData, "displayName");
-  const teamId = text(formData, "teamId");
 
   if (!email || !password) back(path, "Email and password are both required.", "err");
   if (password.length < 8) back(path, "Use a password of at least 8 characters.", "err");
@@ -363,10 +399,6 @@ export async function createUserAction(formData: FormData) {
 
   if (!result.ok) back(path, result.error, "err");
 
-  if (role === "participant" && teamId) {
-    await assignParticipantToTeam(result.userId, Number(teamId));
-  }
-
   revalidateAll();
   back(path, `${displayName || email} added as ${role}.`);
 }
@@ -375,8 +407,7 @@ export async function updateUserAction(formData: FormData) {
   await requireRole("admin");
   const path = `${ADMIN}/users`;
   const userId = text(formData, "userId");
-  const role = text(formData, "role") as UrbanSprintRole;
-  const teamId = text(formData, "teamId");
+  const role = roleFrom(formData, path);
 
   return run(path, "Account updated.", async () => {
     await updateUrbanSprintUser(userId, {
@@ -385,12 +416,6 @@ export async function updateUserAction(formData: FormData) {
       phone: text(formData, "phone") || null,
       active: checked(formData, "active"),
     });
-
-    // Team assignment only means anything for participants; updateUrbanSprintUser
-    // has already cleared any stale membership for the other roles.
-    if (role === "participant") {
-      await assignParticipantToTeam(userId, teamId ? Number(teamId) : null);
-    }
   });
 }
 
@@ -428,7 +453,97 @@ export async function voidCompletionAction(formData: FormData) {
   const path = `${ADMIN}/activity`;
   const { id } = numbers(path, { id: number(formData, "id") });
 
-  return run(path, "Completion voided and points removed.", () =>
-    voidCompletion(id, session.userId, text(formData, "reason"))
+  return run(path, "Completion voided and points removed.", async () => {
+    const teamId = await voidCompletion(id, session.userId, text(formData, "reason"));
+    // A team that has already finished carries its points on the board as a
+    // result; bring that result into line with the corrected total.
+    if (teamId !== null) await recordRaceResult(teamId, session.userId);
+  });
+}
+
+/* ------------------------------ Booking wording ----------------------------- */
+
+/**
+ * The wording Traveloop is still finalising: the Rules & Regulations (booking
+ * page and confirmation email), the declaration ticked before payment, and how
+ * many teams the public results board shows.
+ */
+export async function updateWordingAction(formData: FormData) {
+  await requireRole("admin");
+
+  // Textareas post CRLF line breaks; store plain ones.
+  const multiline = (key: string) =>
+    String(formData.get(key) ?? "")
+      .replace(/\r\n/g, "\n")
+      .trim();
+  const rulesText = multiline("rulesText");
+  const consentText = multiline("consentText");
+  const limit = number(formData, "leaderboardLimit");
+
+  if (!consentText) back(SETTINGS, "The declaration can't be empty — buyers have to have something to agree to.", "err");
+  if (!rulesText) back(SETTINGS, "The Rules & Regulations can't be empty.", "err");
+  if (limit === null || !Number.isInteger(limit) || limit < 0) {
+    back(SETTINGS, "The leaderboard limit has to be a whole number (0 for all teams).", "err");
+  }
+
+  return run(SETTINGS, "Booking wording saved.", () =>
+    updateSettings({ rulesText, consentText, leaderboardLimit: limit })
   );
+}
+
+/* --------------------------------- Results --------------------------------- */
+
+/**
+ * Enters (or corrects) a team's result against its booking. The completion
+ * time is typed as it reads off a stopwatch — "58:12" or "1:02:05".
+ *
+ * Takes either a booking id (the edit form on a row) or a typed Booking ID
+ * (the quick-entry form at the finish line). The team name is never typed:
+ * it comes from the booking, so a result can't be filed under a misspelling.
+ */
+export async function setResultAction(formData: FormData) {
+  const session = await requireRole("admin");
+  const path = returnPath(formData, `${ADMIN}/bookings`);
+
+  let bookingId = number(formData, "bookingId");
+  let reference = text(formData, "reference");
+  const points = number(formData, "points");
+  const seconds = parseDuration(text(formData, "time"));
+
+  if (bookingId === null) {
+    const typed = normalizeBookingId(reference);
+    const booking = typed ? await getBookingByReference(typed) : null;
+    if (!booking) back(path, `No booking has the ID "${reference}".`, "err");
+    if (booking.status !== "paid") {
+      back(path, `${booking.reference} (${booking.teamName}) isn't paid, so it can't have a result.`, "err");
+    }
+    bookingId = booking.id;
+    reference = `${booking.reference} (${booking.teamName})`;
+  }
+
+  if (!Number.isInteger(bookingId) || bookingId <= 0) {
+    back(path, "That form was missing its booking.", "err");
+  }
+  if (points === null || points < 0 || points > 99_999_999) {
+    back(path, `Enter the points for ${reference} as a number of 0 or more.`, "err");
+  }
+  if (seconds === null) {
+    back(path, `Enter ${reference}'s completion time as minutes:seconds, e.g. 58:12, or hours:minutes:seconds.`, "err");
+  }
+
+  return run(path, `Result saved for ${reference}.`, () =>
+    setBookingResult(bookingId, { points, seconds }, session.userId)
+  );
+}
+
+export async function clearResultAction(formData: FormData) {
+  await requireRole("admin");
+  const path = returnPath(formData, `${ADMIN}/bookings`);
+
+  const bookingId = number(formData, "bookingId");
+  if (bookingId === null || !Number.isInteger(bookingId) || bookingId <= 0) {
+    back(path, "That form was missing its booking.", "err");
+  }
+
+  return run(path, `Result cleared for ${text(formData, "reference")}.`, () => clearBookingResult(bookingId));
 }

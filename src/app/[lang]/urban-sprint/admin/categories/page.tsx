@@ -1,17 +1,16 @@
 import { listCategories } from "@/lib/urban-sprint/categories-db";
 import { listBoosters } from "@/lib/urban-sprint/boosters-db";
 import { listStations } from "@/lib/urban-sprint/stations-db";
-import {
-  createCategoryAction,
-  deleteCategoryAction,
-  updateCategoryAction,
-} from "../actions";
-import { AdminFlash, AdminHead, Panel, RowEditor, Swatch } from "../ui";
+import type { Category } from "@/lib/urban-sprint/types";
+import { createCategoryAction, deleteCategoryAction, updateCategoryAction } from "../actions";
+import ConfirmButton from "../ConfirmButton";
+import Dialog from "../Dialog";
+import { AdminFlash, EmptyState, PageHeader, Panel, Swatch } from "../ui";
 
 /**
- * Categories are what connect a station to a booster, so this screen also
- * shows how many of each currently point at a category — deleting one that's
- * in use is refused by the database, and seeing the count first explains why.
+ * Categories connect a station to a booster, so this screen also shows how
+ * many of each point at a category — deleting one in use is refused by the
+ * database, and seeing the count first explains why.
  */
 export default async function AdminCategoriesPage({
   searchParams,
@@ -38,123 +37,112 @@ export default async function AdminCategoriesPage({
 
   return (
     <>
-      <AdminHead
+      <PageHeader
         title="Categories"
-        note="The shared vocabulary for stations and boosters. A booster pays out on stations in its own category."
+        subtitle="The shared vocabulary for stations and boosters. A booster pays out on stations in its own category."
+        actions={
+          <Dialog label="New category" icon="plus" variant="primary" title="New category">
+            <CategoryForm action={createCategoryAction} submit="Add category" nextSort={categories.length} />
+          </Dialog>
+        }
       />
 
       <AdminFlash params={params} />
 
-      <div className="us-admingrid is-narrowfirst">
-        <Panel title="New category">
-          <form className="us-form" action={createCategoryAction}>
-            <label className="us-field">
-              <span>Name</span>
-              <input name="name" placeholder="Food &amp; Beverage" required />
-            </label>
+      <Panel title="All categories" icon="tag" count={String(categories.length)} padded={false}>
+        {categories.length === 0 ? (
+          <EmptyState icon="tag" title="No categories yet">
+            Add one before creating stations or boosters.
+          </EmptyState>
+        ) : (
+          <div className="ad-table-scroll">
+            <table className="ad-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Slug</th>
+                  <th className="is-num">Stations</th>
+                  <th className="is-num">Boosters</th>
+                  <th className="is-num">Order</th>
+                  <th className="is-num" aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {categories.map((category) => {
+                  const counts = usage.get(category.id) ?? { stations: 0, boosters: 0 };
+                  const inUse = counts.stations + counts.boosters > 0;
 
-            <div className="us-form-row">
-              <label className="us-field">
-                <span>Colour</span>
-                <input name="color" type="color" defaultValue="#7c5cff" />
-              </label>
-
-              <label className="us-field">
-                <span>Sort order</span>
-                <input name="sortOrder" type="number" defaultValue={categories.length} />
-              </label>
-            </div>
-
-            <button className="us-btn us-btn-primary us-btn-block" type="submit">
-              Add category
-            </button>
-          </form>
-        </Panel>
-
-        <Panel title="All categories" count={categories.length} flush>
-          {categories.length === 0 ? (
-            <p className="us-panel-empty">
-              No categories yet. Add one before creating stations or boosters.
-            </p>
-          ) : (
-            <div className="us-tablewrap">
-              <table className="us-table">
-                <thead>
-                  <tr>
-                    <th>Category</th>
-                    <th>Slug</th>
-                    <th>Stations</th>
-                    <th>Boosters</th>
-                    <th aria-label="Actions" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {categories.map((category) => {
-                    const counts = usage.get(category.id) ?? { stations: 0, boosters: 0 };
-
-                    return (
-                      <tr key={category.id}>
-                        <td>
-                          <span className="us-tablename">
-                            <Swatch color={category.color} />
-                            {category.name}
-                          </span>
-                        </td>
-                        <td className="us-mono">{category.slug}</td>
-                        <td>{counts.stations}</td>
-                        <td>{counts.boosters}</td>
-                        <td className="us-table-actions">
-                          <RowEditor>
-                            <form className="us-form" action={updateCategoryAction}>
-                              <input type="hidden" name="id" value={category.id} />
-
-                              <label className="us-field">
-                                <span>Name</span>
-                                <input name="name" defaultValue={category.name} required />
-                              </label>
-
-                              <div className="us-form-row">
-                                <label className="us-field">
-                                  <span>Colour</span>
-                                  <input name="color" type="color" defaultValue={category.color} />
-                                </label>
-                                <label className="us-field">
-                                  <span>Sort order</span>
-                                  <input
-                                    name="sortOrder"
-                                    type="number"
-                                    defaultValue={category.sortOrder}
-                                  />
-                                </label>
-                              </div>
-
-                              <button className="us-btn us-btn-primary us-btn-sm" type="submit">
-                                Save
-                              </button>
-                            </form>
-
-                            <form action={deleteCategoryAction} className="us-danger">
-                              <input type="hidden" name="id" value={category.id} />
-                              <button className="us-btn us-btn-danger us-btn-sm" type="submit">
-                                Delete category
-                              </button>
-                              <small>
-                                {counts.stations + counts.boosters > 0
-                                  ? "In use — the database will refuse this until nothing points at it."
-                                  : "Nothing uses this category."}
-                              </small>
-                            </form>
-                          </RowEditor>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Panel>
-      </div>
+                  return (
+                    <tr key={category.id}>
+                      <td>
+                        <span className="usc-name">
+                          <Swatch color={category.color} />
+                          {category.name}
+                        </span>
+                      </td>
+                      <td className="is-mono">{category.slug}</td>
+                      <td className="is-num">{counts.stations}</td>
+                      <td className="is-num">{counts.boosters}</td>
+                      <td className="is-num">{category.sortOrder}</td>
+                      <td className="is-actions">
+                        <Dialog label="Edit" variant="small" title={`Edit ${category.name}`}>
+                          <CategoryForm action={updateCategoryAction} submit="Save category" category={category} />
+                          <form className="usc-danger" action={deleteCategoryAction}>
+                            <input type="hidden" name="id" value={category.id} />
+                            <p>
+                              {inUse
+                                ? `In use by ${counts.stations} station(s) and ${counts.boosters} booster(s) — the database will refuse this until nothing points at it.`
+                                : "Nothing uses this category."}
+                            </p>
+                            <ConfirmButton message={`Delete ${category.name}?`}>Delete category</ConfirmButton>
+                          </form>
+                        </Dialog>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
     </>
+  );
+}
+
+function CategoryForm({
+  action,
+  submit,
+  category,
+  nextSort = 0,
+}: {
+  action: (formData: FormData) => Promise<void>;
+  submit: string;
+  category?: Category;
+  nextSort?: number;
+}) {
+  return (
+    <form className="usc-form" action={action}>
+      {category && <input type="hidden" name="id" value={category.id} />}
+      <label className="admin-field">
+        <span>Name</span>
+        <input name="name" defaultValue={category?.name} placeholder="Food & Beverage" required />
+      </label>
+      <div className="ad-field-grid">
+        <label className="admin-field">
+          <span>Colour</span>
+          <input name="color" type="color" defaultValue={category?.color ?? "#7c5cff"} />
+        </label>
+        <label className="admin-field">
+          <span>Sort order</span>
+          <input name="sortOrder" type="number" defaultValue={category?.sortOrder ?? nextSort} />
+        </label>
+      </div>
+      <div className="usc-form-foot">
+        <button className="ad-btn ad-btn-primary" type="submit">
+          {submit}
+        </button>
+      </div>
+    </form>
   );
 }

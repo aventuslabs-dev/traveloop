@@ -14,6 +14,23 @@ const nextConfig: NextConfig = {
     // modal). No SVGs go through this loader, so "inline" is safe.
     contentDispositionType: "inline",
   },
+  // Urban Sprint's leaderboard used to be its own page; it now lives on the
+  // campaign page. Printed QR codes and old links still point at the old URL.
+  // Redirects run before proxy.ts, which adds the locale to a bare path.
+  async redirects() {
+    return [
+      {
+        source: "/:lang(en|cn)/urban-sprint/leaderboard",
+        destination: "/:lang/urban-sprint#leaderboard",
+        permanent: true,
+      },
+      {
+        source: "/urban-sprint/leaderboard",
+        destination: "/urban-sprint#leaderboard",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

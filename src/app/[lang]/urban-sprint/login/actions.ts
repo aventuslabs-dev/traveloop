@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSupabase } from "@/lib/supabase";
+import { isOperatorEmail, loginEmailFor } from "@/lib/admin-auth";
 import { ROLE_HOME } from "@/lib/urban-sprint/auth";
 import type { UrbanSprintRole } from "@/lib/urban-sprint/types";
 
@@ -14,9 +15,12 @@ import type { UrbanSprintRole } from "@/lib/urban-sprint/types";
  * us_profiles row. One that doesn't is signed straight back out rather than
  * left holding a session that reaches nothing — otherwise a Traveloop customer
  * typing their shop password here would land in a half-authenticated state.
+ *
+ * The Traveloop operator signs in here too, as "admin" or by email, and is
+ * always an admin (see lib/urban-sprint/auth.ts).
  */
 export async function login(formData: FormData) {
-  const email = String(formData.get("email") ?? "").trim();
+  const email = loginEmailFor(String(formData.get("email") ?? ""));
   const password = String(formData.get("password") ?? "");
   const next = String(formData.get("next") ?? "");
 
@@ -30,6 +34,8 @@ export async function login(formData: FormData) {
   if (error || !data.user) {
     redirect(`/urban-sprint/login?error=1${nextParam(next)}`);
   }
+
+  if (isOperatorEmail(data.user.email)) redirect(destination("admin", next));
 
   const { data: profile } = await getSupabase()
     .from("us_profiles")

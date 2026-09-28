@@ -4,6 +4,11 @@ import { getStripe } from "@/lib/stripe";
 import { fulfillPassOrder, toPassOrder } from "@/lib/fulfillment";
 import { getCheckoutDraft } from "@/lib/checkout-drafts-db";
 import { recordPaymentAttempt } from "@/lib/payment-attempts-db";
+import {
+  fulfilTeamBookingSession,
+  isTeamBookingSession,
+} from "@/lib/urban-sprint/booking-fulfillment";
+import { markBookingProcessing, releaseBooking } from "@/lib/urban-sprint/bookings-db";
 
 export const runtime = "nodejs";
 
@@ -23,6 +28,12 @@ export const runtime = "nodejs";
  *   checkout.session.async_payment_failed     — logs an unsettled FPX order
  *   payment_intent.payment_failed             — records a declined payment
  *   checkout.session.expired                  — records an abandoned checkout
+ *
+ * Urban Sprint team bookings arrive on the same events. They are told apart by
+ * `kind` in the session metadata and handled in lib/urban-sprint, which marks
+ * the booking paid against its slot before fulfilling it as a Traveloop order
+ * with a Platinum Pass per racer. Their session has no checkout draft, so it
+ * must never go straight to toPassOrder, which would record an empty order.
  */
 export async function POST(request: Request) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -57,6 +68,9 @@ export async function POST(request: Request) {
         // so it is as settled as a paid one.
         if (session.payment_status === "paid" || session.payment_status === "no_payment_required") {
           await fulfillCompletedSession(session.id);
+        } else if (isTeamBookingSession(session)) {
+          // Keeps the team's place past its hold while the money settles.
+          await markBookingProcessing(session.id);
         } else {
           console.info(
             `[stripe-webhook] Session ${session.id} completed but is ${session.payment_status}; awaiting settlement.`
@@ -71,6 +85,11 @@ export async function POST(request: Request) {
       }
 
       case "checkout.session.async_payment_failed": {
+        // A team's place goes back on sale; the failure itself is recorded by
+        // payment_intent.payment_failed below, like any other.
+        if (isTeamBookingSession(event.data.object)) {
+          await releaseBooking({ sessionId: event.data.object.id }, "failed");
+        }
         // Logged but not recorded: Stripe raises payment_intent.payment_failed
         // for the same failure, and that branch writes the row. Recording both
         // would show one failed FPX payment as two failed attempts.
@@ -89,6 +108,9 @@ export async function POST(request: Request) {
       }
 
       case "checkout.session.expired": {
+        if (isTeamBookingSession(event.data.object)) {
+          await releaseBooking({ sessionId: event.data.object.id }, "expired");
+        }
         await recordExpiredSession(event.id, event.created, event.data.object);
         break;
       }
@@ -105,9 +127,14 @@ export async function POST(request: Request) {
   return NextResponse.json({ received: true });
 }
 
-/** Re-reads the session from Stripe, then hands it to fulfilment. */
+/** Re-reads the session from Stripe, then hands it to the fulfilment it belongs to. */
 async function fulfillCompletedSession(sessionId: string): Promise<void> {
   const session = await getStripe().checkout.sessions.retrieve(sessionId);
+
+  if (isTeamBookingSession(session)) {
+    await fulfilTeamBookingSession(session);
+    return;
+  }
 
   await fulfillPassOrder(await toPassOrder(session));
 }

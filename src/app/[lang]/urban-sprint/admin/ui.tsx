@@ -1,63 +1,28 @@
-/* Layout primitives for the Urban Sprint console. Server-safe, so every admin
-   screen stays a Server Component and the only client code here is the rail. */
+import Link from "next/link";
+import {
+  EmptyState,
+  Flash,
+  PageHeader,
+  Panel,
+  Pill,
+  StatGrid,
+  formatDay,
+  formatDayTime,
+  type PillTone,
+  type Stat,
+} from "@/app/[lang]/admin/(dashboard)/ui";
+import type { BookingStatus } from "@/lib/urban-sprint/bookings-db";
 
-export function AdminHead({
-  title,
-  note,
-  actions,
-}: {
-  title: string;
-  note?: string;
-  actions?: React.ReactNode;
-}) {
-  return (
-    <header className="us-adminhead">
-      <div>
-        <h1>{title}</h1>
-        {note && <p>{note}</p>}
-      </div>
-      {actions && <div className="us-adminhead-actions">{actions}</div>}
-    </header>
-  );
-}
+/* The console speaks the Traveloop admin's layout language, so its page
+   header, stat tiles, panels, pills and empty states are those components
+   rather than look-alikes. What follows is only what Urban Sprint adds. */
 
-export function Panel({
-  title,
-  note,
-  count,
-  actions,
-  flush = false,
-  children,
-}: {
-  title?: string;
-  note?: string;
-  count?: string | number;
-  actions?: React.ReactNode;
-  /** Off-padding for tables, which manage their own gutters. */
-  flush?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="us-adminpanel">
-      {title && (
-        <header className="us-adminpanel-head">
-          <div>
-            <h2>{title}</h2>
-            {note && <p>{note}</p>}
-          </div>
-          {count !== undefined && <span className="us-adminpanel-count">{count}</span>}
-          {actions}
-        </header>
-      )}
-      <div className={flush ? "us-adminpanel-flush" : "us-adminpanel-body"}>{children}</div>
-    </section>
-  );
-}
+export { EmptyState, Flash, PageHeader, Panel, Pill, StatGrid, formatDay, formatDayTime };
+export type { PillTone, Stat };
 
 /**
  * Renders the flash carried back by an action's redirect. Keeping the message
- * in the URL is what lets every console form be a plain server-action form with
- * no client state.
+ * in the URL is what lets every console form be a plain server-action form.
  */
 export function AdminFlash({
   params,
@@ -66,36 +31,55 @@ export function AdminFlash({
 }) {
   const message = typeof params.msg === "string" ? params.msg : null;
   if (!message) return null;
+  return <Flash tone={params.tone === "err" ? "err" : "ok"}>{message}</Flash>;
+}
 
-  const tone = params.tone === "err" ? "err" : "ok";
+/** Operator-chosen colour (team, category), as a small square. */
+export function Swatch({ color }: { color: string }) {
+  return <span className="usc-swatch" style={{ background: color }} aria-hidden />;
+}
 
+/** The "updating live" marker. Purely a signal — LiveRefresh does the work. */
+export function LiveBadge({ label = "Live" }: { label?: string }) {
   return (
-    <p className={`us-flash us-flash-${tone}`} role={tone === "err" ? "alert" : "status"}>
-      {message}
-    </p>
+    <span className="usc-live">
+      <i aria-hidden />
+      {label}
+    </span>
   );
 }
 
-/**
- * A row's edit form, collapsed by default. <details> rather than a modal: it
- * needs no JavaScript, keeps the table scannable, and lets an operator open
- * two rows side by side to compare them.
- */
-export function RowEditor({
-  label = "Edit",
+export function RankBadge({ rank }: { rank: number }) {
+  return <span className={`usc-rank${rank <= 3 ? ` is-${rank}` : ""}`}>{rank}</span>;
+}
+
+export const BOOKING_STATUS: Record<BookingStatus, { label: string; tone: PillTone }> = {
+  paid: { label: "Paid", tone: "success" },
+  processing: { label: "Payment settling", tone: "warn" },
+  pending: { label: "At checkout", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "danger" },
+  expired: { label: "Abandoned", tone: "neutral" },
+  failed: { label: "Payment failed", tone: "danger" },
+};
+
+/** A booking's detail page. The Booking ID is the key staff already quote. */
+export function bookingHref(reference: string): string {
+  return `/urban-sprint/admin/bookings/${reference}`;
+}
+
+/** One of a page's view tabs (Upcoming, Past…), as a link so each view has a URL. */
+export function FilterLink({
+  href,
+  active,
   children,
 }: {
-  label?: string;
+  href: string;
+  active: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <details className="us-rowedit">
-      <summary>{label}</summary>
-      <div className="us-rowedit-body">{children}</div>
-    </details>
+    <Link className={`ad-filter${active ? " is-active" : ""}`} href={href} aria-current={active ? "page" : undefined}>
+      {children}
+    </Link>
   );
-}
-
-export function Swatch({ color }: { color: string }) {
-  return <span className="us-swatch" style={{ background: color }} aria-hidden />;
 }

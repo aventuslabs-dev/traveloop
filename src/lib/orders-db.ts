@@ -1,12 +1,12 @@
 import { getSupabase } from "./supabase";
-import type { PassOrder } from "./fulfillment";
+import type { OrderProduct, PassOrder } from "./fulfillment";
 
 /**
  * An order as it exists in the database. `registration` is deliberately
  * dropped: it's an input to fulfilment, whose durable parts are split between
  * customer_profiles and the trip-date columns below.
  */
-export type StoredOrder = Omit<PassOrder, "items" | "draftId"> & {
+export type StoredOrder = Omit<PassOrder, "items" | "draftId" | "buyerItem"> & {
   invoiceNumber: string;
   createdAt: string;
   userId: string | null;
@@ -48,11 +48,27 @@ type OrderRow = {
   discount_code?: string | null;
   discount_label?: string | null;
   discount_cents?: number | null;
+  product?: string | null;
+  product_reference?: string | null;
+  product_description?: string | null;
 };
+
+/** Optional reads for the same reason as the confirmation columns below. */
+function productFrom(row: OrderRow): OrderProduct {
+  if (row.product === "urban_sprint" && row.product_reference) {
+    return {
+      kind: "urban_sprint",
+      reference: row.product_reference,
+      description: row.product_description ?? "",
+    };
+  }
+  return { kind: "pass" };
+}
 
 function toStoredOrder(row: OrderRow): StoredOrder {
   return {
     sessionId: row.session_id,
+    product: productFrom(row),
     passKey: row.pass_key,
     passName: row.pass_name,
     quantity: row.quantity,
@@ -144,6 +160,9 @@ export async function insertOrderIfNew(
       discount_code: order.discount.code,
       discount_label: order.discount.codeLabel,
       discount_cents: order.discount.codeCents,
+      product: order.product.kind,
+      product_reference: order.product.kind === "urban_sprint" ? order.product.reference : null,
+      product_description: order.product.kind === "urban_sprint" ? order.product.description : null,
     })
     .select()
     .single<OrderRow>();

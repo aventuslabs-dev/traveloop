@@ -65,6 +65,9 @@ export function slugify(value: string): string {
   return value
     .toLowerCase()
     .normalize("NFKD")
+    // NFKD splits "é" into "e" plus a combining accent; drop the accent so
+    // "Cafés" becomes "cafes", not "cafe-s".
+    .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
@@ -76,4 +79,38 @@ export function initials(name: string): string {
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/** Completion time: 3725 -> "1:02:05", 1805 -> "30:05". */
+export function formatDuration(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const ss = String(seconds).padStart(2, "0");
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${ss}` : `${minutes}:${ss}`;
+}
+
+/**
+ * Reads a completion time as staff type it off a stopwatch: "58:12",
+ * "1:02:05", or plain minutes ("75"). Null for anything else, including zero —
+ * a team can't finish in no time, and a typo shouldn't rank first on ties.
+ */
+export function parseDuration(input: string): number | null {
+  const value = input.trim();
+
+  if (/^\d{1,3}$/.test(value)) {
+    const minutes = Number(value);
+    return minutes > 0 ? minutes * 60 : null;
+  }
+
+  const match = value.match(/^(?:(\d{1,2}):)?(\d{1,3}):(\d{2})$/);
+  if (!match) return null;
+
+  const [, h, m, s] = match;
+  const minutes = Number(m);
+  const seconds = Number(s);
+  if (seconds > 59 || (h !== undefined && minutes > 59)) return null;
+
+  const total = Number(h ?? 0) * 3600 + minutes * 60 + seconds;
+  return total > 0 ? total : null;
 }

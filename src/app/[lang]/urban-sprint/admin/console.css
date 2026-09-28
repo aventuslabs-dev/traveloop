@@ -1,0 +1,231 @@
+/* =========================================================================
+   URBAN SPRINT CONSOLE
+   Built on the Traveloop admin design system (the .admin-shell / .ad-*
+   rules in globals.css), so an operator moving between the two consoles
+   meets one layout language. This file only adds what that system lacks —
+   slot grids, standings, edit dialogs — as .usc-* classes.
+
+   The console renders inside .us-root, whose element defaults (.us-root h1,
+   .us-root p, .us-root a) outrank a single class. The block directly below
+   restates the admin rules those defaults would otherwise flatten; every
+   selector is prefixed .us-root .admin-shell to win that contest without
+   touching the campaign's own stylesheet.
+   ========================================================================= */
+
+.us-root .admin-shell {
+  min-height: 100dvh;
+  font-size: 16px;
+  line-height: normal;
+}
+
+.us-root .admin-shell .ad-head h1 {
+  font-family: var(--ad-display);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.us-root .admin-shell .ad-panel-title,
+.us-root .admin-shell .ad-dialog-title {
+  font-family: var(--ad-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.us-root .admin-shell .ad-dialog-title { margin: 0 0 4px; }
+.us-root .admin-shell .ad-head-sub { margin: 6px 0 0; }
+.us-root .admin-shell .ad-stat-label { margin: 0 0 8px; }
+.us-root .admin-shell .ad-stat-note { margin: 6px 0 0; }
+.us-root .admin-shell .admin-rail-section { margin: 20px 20px 8px; }
+.us-root .admin-shell .ad-empty p { margin: 0 auto; }
+.us-root .admin-shell .ad-panel-note { margin: 0 0 16px; }
+.us-root .admin-shell .ad-panel-note:last-child { margin-bottom: 0; }
+.us-root .admin-shell .ad-flash { margin-bottom: 18px; }
+.us-root .admin-shell .ad-link { color: var(--ad-primary); }
+.us-root .admin-shell .ad-head-crumb { color: var(--ad-muted); }
+.us-root .admin-shell .ad-head-crumb:hover { color: var(--ad-primary); }
+.us-root .admin-shell .admin-rail-link { color: var(--ad-rail-muted); }
+.us-root .admin-shell .admin-switch a { color: var(--ad-rail-muted); }
+.us-root .admin-shell .admin-switch a:hover { color: var(--ad-rail-ink); }
+.us-root .admin-shell .admin-switch a.is-active { color: var(--ad-ink); }
+.us-root .admin-shell .admin-switch a.is-active.is-sprint { color: #fff; }
+.us-root .admin-shell .admin-rail-link:hover { color: var(--ad-rail-ink); }
+.us-root .admin-shell .admin-rail-link.is-active { color: #fff; }
+
+/* ---------- rail ---------- */
+.admin-shell .usc-rail-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 12px; }
+.admin-shell .admin-rail-badge.is-sprint { background: rgba(215, 41, 54, 0.22); color: #ffc9cd; }
+.us-root .admin-shell .usc-rail-public {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 12px;
+  font-size: 12.5px; font-weight: 600; color: var(--ad-rail-muted);
+}
+.us-root .admin-shell .usc-rail-public:hover { color: var(--ad-rail-ink); }
+.admin-shell .usc-rail-public svg { width: 14px; height: 14px; }
+.admin-shell .admin-rail-count.is-alert { background: var(--red, #d72936); color: #fff; }
+
+/* ---------- small pieces ---------- */
+.admin-shell .usc-muted { color: var(--ad-muted); }
+.admin-shell .usc-mono { font-family: var(--ad-mono); font-size: 12px; letter-spacing: 0.02em; }
+.admin-shell .usc-swatch {
+  display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.12);
+}
+.admin-shell .usc-name { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ad-ink); }
+.admin-shell .ad-table .is-wrap { white-space: normal; min-width: 180px; }
+.admin-shell .ad-table tr.is-dim td { opacity: 0.55; }
+.admin-shell .ad-table tr.is-void td { background: var(--ad-danger-soft); }
+.admin-shell .ad-table td.is-actions { text-align: right; }
+.admin-shell .ad-table th.is-num, .admin-shell .ad-table td.is-num { text-align: right; }
+.admin-shell .usc-row-actions { display: inline-flex; gap: 6px; justify-content: flex-end; }
+.admin-shell .usc-row-link { color: var(--ad-ink); font-weight: 600; }
+.admin-shell .usc-row-link:hover { color: var(--ad-primary); text-decoration: underline; }
+.admin-shell .ad-table tbody tr.is-clickable { cursor: pointer; }
+
+.admin-shell .usc-live {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid rgba(13, 107, 72, 0.24); background: var(--ad-success-soft);
+  font-size: 11.5px; font-weight: 600; color: var(--ad-success);
+}
+.admin-shell .usc-live i {
+  width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+  animation: uscPulse 1.6s ease-in-out infinite;
+}
+@keyframes uscPulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .admin-shell .usc-live i { animation: none; } }
+
+.admin-shell .usc-rank {
+  display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px;
+  border-radius: 7px; background: var(--ad-info-soft); font-family: var(--ad-mono);
+  font-size: 12px; font-weight: 600; color: var(--ad-ink-2);
+}
+.admin-shell .usc-rank.is-1 { background: #fbf1d4; color: #8a6414; }
+.admin-shell .usc-rank.is-2 { background: #eceff3; color: #4b5563; }
+.admin-shell .usc-rank.is-3 { background: #f6e6da; color: #8a4b1f; }
+
+/* ---------- layout ---------- */
+.admin-shell .usc-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 18px; align-items: start; }
+@media (min-width: 1100px) {
+  .admin-shell .usc-grid { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
+}
+.admin-shell .usc-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.admin-shell .usc-find { display: flex; gap: 8px; flex: 1 1 320px; max-width: 460px; }
+.admin-shell .usc-find .ad-search { max-width: none; }
+
+/* ---------- slot grid ---------- */
+.admin-shell .usc-slots td, .admin-shell .usc-slots th { text-align: center; }
+.admin-shell .usc-slots td:first-child, .admin-shell .usc-slots th:first-child { text-align: left; }
+.admin-shell .usc-slot {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 52px; height: 26px;
+  padding: 0 8px; border-radius: 6px; background: var(--ad-info-soft);
+  font-family: var(--ad-mono); font-size: 11.5px; font-weight: 600; color: var(--ad-muted);
+}
+.admin-shell .usc-slot.is-some { background: var(--ad-primary-soft); color: var(--ad-primary); }
+.admin-shell .usc-slot.is-full { background: var(--ad-danger-soft); color: var(--ad-danger); }
+.admin-shell .usc-slot.is-closed { background: transparent; color: var(--ad-line-2); }
+.admin-shell .usc-slots tr.is-today td { background: var(--ad-surface-2); }
+
+/* ---------- attention list ---------- */
+.us-root .admin-shell .usc-todo { margin: 0; padding: 0; list-style: none; }
+.admin-shell .usc-todo li {
+  display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+  border-bottom: 1px solid var(--ad-line); font-size: 13px; color: var(--ad-ink-2);
+}
+.admin-shell .usc-todo li:last-child { border-bottom: 0; }
+.admin-shell .usc-todo-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.admin-shell .usc-todo-body b { color: var(--ad-ink); font-weight: 600; }
+.admin-shell .usc-todo-body span { font-size: 12px; color: var(--ad-muted); }
+.admin-shell .usc-todo .ad-btn { height: 30px; padding: 0 11px; font-size: 12px; }
+
+/* ---------- activity feed ---------- */
+.admin-shell .usc-points { font-family: var(--ad-mono); font-weight: 600; color: var(--ad-ink); }
+.admin-shell .usc-points.is-boost { color: var(--ad-success); }
+
+/* ---------- forms ---------- */
+.admin-shell .usc-form { display: flex; flex-direction: column; }
+.us-root .admin-shell .usc-hint { display: block; margin-top: 6px; font-size: 12px; line-height: 1.5; color: var(--ad-muted); }
+.admin-shell .admin-field input[type="color"] { width: 64px; padding: 4px; cursor: pointer; }
+.admin-shell .usc-form .ad-check { max-width: none; margin: 4px 0 15px; }
+.admin-shell .usc-form-foot { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
+.admin-shell .usc-inline-form { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.admin-shell .usc-inline-form .admin-field { margin-bottom: 0; flex: 1 1 160px; }
+.admin-shell .usc-inline-form .ad-btn { flex: none; }
+.admin-shell .usc-danger {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 18px; padding-top: 16px;
+  border-top: 1px dashed var(--ad-line-2);
+}
+.us-root .admin-shell .usc-danger p { flex: 1 1 220px; margin: 0; font-size: 12px; line-height: 1.5; color: var(--ad-muted); }
+.admin-shell .ad-btn-ghost-danger { color: var(--ad-danger); }
+.admin-shell .ad-btn-ghost-danger:hover { background: var(--ad-danger-soft); border-color: rgba(185, 28, 44, 0.4); }
+.admin-shell .ad-btn-sm { height: 30px; padding: 0 11px; font-size: 12px; }
+
+/* ---------- dialogs ----------
+   Rendered inside .admin-shell in the DOM (only the top layer lifts them
+   out visually), so the console's scoped button and field rules reach in. */
+.admin-shell dialog.usc-dialog {
+  width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: auto;
+  padding: 0; border: 1px solid var(--ad-line); border-radius: 12px;
+  background: var(--ad-surface); color: var(--ad-ink); font-family: var(--ad-font);
+  box-shadow: 0 24px 60px rgba(8, 15, 28, 0.28);
+}
+.admin-shell dialog.usc-dialog.is-wide { width: min(760px, calc(100vw - 32px)); }
+.admin-shell dialog.usc-dialog::backdrop { background: rgba(8, 15, 28, 0.5); backdrop-filter: blur(2px); }
+.admin-shell .usc-dialog-head {
+  position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; gap: 12px;
+  padding: 18px 22px 14px; border-bottom: 1px solid var(--ad-line); background: var(--ad-surface);
+}
+.admin-shell .usc-dialog-head > div { flex: 1; min-width: 0; }
+.us-root .admin-shell .usc-dialog-sub { margin: 0; font-size: 12.5px; color: var(--ad-muted); line-height: 1.5; }
+.admin-shell .usc-dialog-close {
+  display: grid; place-items: center; width: 30px; height: 30px; flex: none; border: 0;
+  border-radius: var(--ad-radius-sm); background: transparent; color: var(--ad-muted); cursor: pointer;
+}
+.admin-shell .usc-dialog-close:hover { background: var(--ad-surface-2); color: var(--ad-ink); }
+.admin-shell .usc-dialog-close svg { width: 16px; height: 16px; }
+.admin-shell .usc-dialog-body { padding: 18px 22px 22px; }
+
+/* ---------- booking detail ---------- */
+.admin-shell .usc-people td { vertical-align: top; }
+.admin-shell .usc-pass { font-family: var(--ad-mono); font-size: 12px; font-weight: 600; color: var(--ad-ink); letter-spacing: 0.03em; }
+.us-root .admin-shell .usc-copy { user-select: all; }
+.admin-shell .usc-result {
+  display: flex; gap: 28px; flex-wrap: wrap; align-items: baseline; margin-bottom: 16px;
+}
+.admin-shell .usc-result b {
+  display: block; font-family: var(--ad-display); font-size: 26px; font-weight: 600;
+  letter-spacing: -0.03em; color: var(--ad-ink); font-variant-numeric: tabular-nums;
+}
+.admin-shell .usc-result span { font-family: var(--ad-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ad-muted); }
+.us-root .admin-shell .usc-wording { margin: 0; white-space: pre-line; font-size: 13px; line-height: 1.6; color: var(--ad-ink-2); }
+
+/* ---------- fit and wrap ---------- */
+/* Pills inside a stacked cell keep their own width. */
+.admin-shell .ad-cell-stack .ad-pill { align-self: flex-start; }
+/* Error text from a mail provider can carry a 66-character session id. */
+.admin-shell .usc-todo-body span {
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+/* Racer rows carry addresses and long emails; let them wrap so the pass
+   number stays in view without scrolling sideways. */
+.admin-shell .usc-people td { white-space: normal; }
+.admin-shell .usc-people td .ad-cell-stack { min-width: 0; }
+.admin-shell .usc-people td b { overflow-wrap: anywhere; }
+.admin-shell .usc-people .usc-pass,
+.admin-shell .usc-people .usc-mono { white-space: nowrap; overflow-wrap: normal; }
+.admin-shell .usc-people td:nth-child(5) { min-width: 190px; }
+/* A dialog opened from a row lives inside that row's right-aligned, no-wrap
+   actions cell; it must not inherit either. */
+.admin-shell dialog.usc-dialog { text-align: left; white-space: normal; }
+
+@media (max-width: 640px) {
+  /* The pill and the button take their own lines, so the team gets the width. */
+  .admin-shell .usc-todo li { flex-wrap: wrap; align-items: flex-start; }
+  .admin-shell .usc-todo-body { flex-basis: 100%; order: 2; }
+  .admin-shell .usc-todo .ad-btn { order: 3; }
+  .admin-shell .usc-find { max-width: none; }
+}
+
+/* A booked team's private page link, on its booking page. */
+.admin-shell .usc-teamlink { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--ad-line); }
+.admin-shell .usc-teamlink .ad-panel-note { margin: 0 0 10px; }
+.admin-shell .usc-teamlink-actions { display: flex; flex-wrap: wrap; gap: 8px; }

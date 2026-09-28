@@ -226,6 +226,18 @@ export function Icon({ name }: { name: string }) {
         <path d="M3 9.5h18M3 15h18M9.5 9.5V20" />
       </>
     ),
+    plus: <path d="M12 5v14M5 12h14" />,
+    x: <path d="M6 6l12 12M18 6 6 18" />,
+    download: <path d="M12 3v12m0 0-4.5-4.5M12 15l4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />,
+    external: <path d="M14 4h6v6M20 4l-9 9M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" />,
+    flag: <path d="M5 21V4m0 0h11l-2 4 2 4H5" />,
+    settings: (
+      <>
+        <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+        <circle cx="16" cy="7" r="2" />
+        <circle cx="10" cy="17" r="2" />
+      </>
+    ),
     instagram: (
       <>
         <rect x="3" y="3" width="18" height="18" rx="5" />

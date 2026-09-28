@@ -3,11 +3,22 @@
    --------------------------------------------------------------------------
    Loaded only by src/app/urban-sprint/layout.tsx, so none of it reaches the
    Traveloop site. Everything is scoped under .us-root; globals.css is not
-   touched, and the two design languages never meet.
+   touched.
 
-   The look: night asphalt. A near-black ground, one hot accent for the race
-   itself and a cooler one for boosters, hairline rules instead of borders,
-   and numerals that read at arm's length — this is used walking.
+   The look: Traveloop, running. The campaign exists to introduce the
+   Traveloop pass, so it wears the brand — Traveloop navy for the ground,
+   Traveloop red for the race and every call to action, Traveloop blue
+   (brightened for dark grounds) reserved for boosters so a bonus is never
+   mistaken for a plain score. Sora for display, with the emphasised phrase
+   picked out in red rather than in Traveloop's Playfair italic, which reads
+   slowly on a phone mid-race.
+
+   Two grounds share one set of tokens:
+     .us-root    navy — the phone app, console, scoreboard and login
+     .us-light   cream — marketing sections and the booking form, the same
+                 warm-white the Traveloop site and its checkout sit on
+   Components are written against the tokens only, so any of them can sit
+   on either ground.
 
    Structure
      1. Tokens
@@ -19,44 +30,65 @@
      7. Phone app shell (gamemaster + participant)
      8. Gamemaster flow
      9. Sheets, reveal, celebration
-    10. Admin console
+    10. Forms (the console itself is admin/console.css)
     11. Motion + responsive
+    12. Team booking
+    13. Results, wording, console
    ========================================================================== */
 
 /* ------------------------------ 1. Tokens ------------------------------- */
 
 .us-root {
-  --us-bg: #0a0b0f;
-  --us-bg-2: #0e1016;
-  --us-surface: #14161e;
-  --us-surface-2: #1a1d27;
-  --us-surface-3: #22262f;
-  --us-line: rgba(255, 255, 255, 0.09);
-  --us-line-strong: rgba(255, 255, 255, 0.16);
+  /* Brand constants — the same values as globals.css :root, restated here so
+     this file never depends on the Traveloop stylesheet's variable names. */
+  --tl-blue: #244798;
+  --tl-deep: #071b3a;
+  --tl-navy: #061329;
+  --tl-red: #d72936;
+  --tl-cream: #f4efe7;
+  --tl-paper: #fbfaf7;
+  --tl-ink: #101a2c;
 
-  --us-text: #f4f5f8;
-  --us-muted: #8d93a4;
-  --us-faint: #5d6373;
+  --us-bg: #061329;
+  --us-bg-2: #081a36;
+  --us-surface: #0d2245;
+  --us-surface-2: #122a52;
+  --us-surface-3: #19345f;
+  --us-line: rgba(186, 205, 245, 0.12);
+  --us-line-strong: rgba(186, 205, 245, 0.22);
+  /* Quiet fills for rank chips, neutral pills and empty states. */
+  --us-tint: rgba(255, 255, 255, 0.06);
+  --us-tint-2: rgba(255, 255, 255, 0.03);
+  /* What a category colour is mixed toward for its chip text. */
+  --us-mix: #ffffff;
 
-  /* Sprint orange — the race, the CTA, the team default. */
-  --us-accent: #ff4d1c;
-  --us-accent-soft: rgba(255, 77, 28, 0.14);
-  /* Booster violet — reserved for the booster mechanic so a bonus is never
-     confused with a plain score. */
-  --us-boost: #7c5cff;
-  --us-boost-soft: rgba(124, 92, 255, 0.16);
+  --us-text: #f6f4ef;
+  --us-muted: #a5b1c8;
+  --us-faint: #7182a0;
 
-  --us-live: #21d47f;
-  --us-warn: #ffb020;
-  --us-danger: #ff4d6a;
+  /* Traveloop red, lifted a step so it holds its weight on navy. */
+  --us-accent: #e8323f;
+  --us-accent-hover: #f24b57;
+  --us-accent-soft: rgba(232, 50, 63, 0.16);
+  --us-accent-text: #ff8d95;
+  /* Traveloop blue, brightened for navy. Boosters only. */
+  --us-boost: #5b8cff;
+  --us-boost-soft: rgba(91, 140, 255, 0.16);
+  --us-boost-text: #aec6ff;
+
+  --us-live: #2fd08a;
+  --us-live-text: #8ef0c2;
+  --us-warn: #f5b23d;
+  --us-danger: #ff5a6e;
+  --us-danger-text: #ffa7b2;
 
   --us-gold: #ffc94d;
   --us-silver: #c9d1e0;
   --us-bronze: #d98a4f;
 
   --us-radius: 14px;
-  --us-radius-lg: 20px;
-  --us-shell: 1180px;
+  --us-radius-lg: 22px;
+  --us-shell: 1200px;
 
   --us-display: var(--font-sora), system-ui, sans-serif;
   --us-body: var(--font-dm-sans), system-ui, sans-serif;
@@ -67,13 +99,60 @@
   --cat: var(--us-boost);
 }
 
+.us-light {
+  --us-bg: var(--tl-paper);
+  --us-bg-2: var(--tl-cream);
+  --us-surface: #ffffff;
+  --us-surface-2: #f8f5ef;
+  --us-surface-3: #efe9df;
+  --us-line: rgba(16, 26, 44, 0.1);
+  --us-line-strong: rgba(16, 26, 44, 0.2);
+  --us-tint: rgba(16, 26, 44, 0.05);
+  --us-tint-2: rgba(16, 26, 44, 0.025);
+  --us-mix: var(--tl-ink);
+
+  --us-text: var(--tl-ink);
+  --us-muted: #5b6477;
+  --us-faint: #7c8599;
+
+  --us-accent: var(--tl-red);
+  --us-accent-hover: #bf1f2b;
+  --us-accent-soft: rgba(215, 41, 54, 0.1);
+  --us-accent-text: #b21d29;
+  --us-boost: var(--tl-blue);
+  --us-boost-soft: rgba(36, 71, 152, 0.09);
+  --us-boost-text: var(--tl-blue);
+
+  --us-live: #10875a;
+  --us-live-text: #0b6a46;
+  --us-warn: #a76200;
+  --us-danger: #c8243a;
+  --us-danger-text: #ad1f33;
+
+  --us-gold: #b8870c;
+  --us-silver: #6f7a8c;
+  --us-bronze: #a3582a;
+
+  /* Re-declared, not inherited: a custom property that references another is
+     resolved where it's declared, so these would otherwise keep navy values. */
+  --team: var(--us-accent);
+  --cat: var(--us-boost);
+
+  background: var(--us-bg);
+  color: var(--us-text);
+}
+
 /* --------------------------- 2. Base + shell ---------------------------- */
 
 /* Scoped to pages that actually contain the app, so the Traveloop body style
    is untouched everywhere else. Stops the warm-white ground showing through
-   on overscroll. */
+   on overscroll — or, on the cream booking pages, lets it. */
 body:has(.us-root) {
-  background: #0a0b0f;
+  background: #061329;
+}
+
+body:has(main.us-light) {
+  background: #fbfaf7;
 }
 
 .us-root {
@@ -142,16 +221,6 @@ body:has(.us-root) {
   color: var(--us-muted);
 }
 
-.us-strong {
-  font-family: var(--us-display);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.us-dim {
-  color: var(--us-faint);
-}
-
 /* ------------------- 3. Buttons, fields, primitives --------------------- */
 
 .us-btn {
@@ -189,11 +258,11 @@ body:has(.us-root) {
 .us-btn-primary {
   background: var(--us-accent);
   color: #fff;
-  box-shadow: 0 8px 24px -12px rgba(255, 77, 28, 0.9);
+  box-shadow: 0 10px 26px -12px color-mix(in srgb, var(--us-accent) 85%, transparent);
 }
 
 .us-btn-primary:hover:not(:disabled) {
-  background: #ff6236;
+  background: var(--us-accent-hover);
 }
 
 .us-btn-ghost {
@@ -203,24 +272,8 @@ body:has(.us-root) {
 }
 
 .us-btn-ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.28);
-}
-
-.us-btn-danger {
-  background: rgba(255, 77, 106, 0.14);
-  border-color: rgba(255, 77, 106, 0.35);
-  color: #ff8ba0;
-}
-
-.us-btn-danger:hover:not(:disabled) {
-  background: rgba(255, 77, 106, 0.22);
-}
-
-.us-btn-warn {
-  background: rgba(255, 176, 32, 0.14);
-  border-color: rgba(255, 176, 32, 0.35);
-  color: var(--us-warn);
+  background: var(--us-tint);
+  border-color: var(--us-text);
 }
 
 .us-btn-sm {
@@ -251,12 +304,6 @@ body:has(.us-root) {
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-.us-form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
 }
 
 .us-field {
@@ -293,7 +340,7 @@ body:has(.us-root) {
   border-radius: 12px;
   color: var(--us-text);
   font-family: var(--us-body);
-  font-size: 15px; /* 16px-ish: stops iOS zooming the page on focus */
+  font-size: 16px; /* iOS zooms the page into any field under 16px */
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
@@ -309,6 +356,21 @@ body:has(.us-root) {
   outline: none;
   border-color: var(--us-accent);
   background: var(--us-surface-3);
+}
+
+/* On cream, fields are white cards of their own — the cream tint that works
+   on navy would vanish into a cream panel. */
+.us-light .us-field input,
+.us-light .us-field select,
+.us-light .us-field textarea {
+  background-color: var(--us-surface);
+}
+
+.us-light .us-field input:focus,
+.us-light .us-field select:focus,
+.us-light .us-field textarea:focus {
+  background-color: var(--us-surface);
+  box-shadow: 0 0 0 3px var(--us-accent-soft);
 }
 
 .us-field input[type="color"] {
@@ -327,21 +389,6 @@ body:has(.us-root) {
   padding-right: 38px;
 }
 
-.us-check {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.us-check input {
-  width: 20px;
-  height: 20px;
-  accent-color: var(--us-accent);
-  cursor: pointer;
-}
-
 .us-form-actions {
   display: flex;
   gap: 10px;
@@ -358,7 +405,7 @@ body:has(.us-root) {
   border-radius: 999px;
   background: color-mix(in srgb, var(--cat) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--cat) 38%, transparent);
-  color: color-mix(in srgb, var(--cat) 72%, white);
+  color: color-mix(in srgb, var(--cat) 72%, var(--us-mix));
   font-family: var(--us-display);
   font-size: 11px;
   font-weight: 600;
@@ -384,7 +431,7 @@ body:has(.us-root) {
 }
 
 .us-pill-neutral {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--us-tint);
   color: var(--us-muted);
 }
 .us-pill-ok {
@@ -397,11 +444,11 @@ body:has(.us-root) {
 }
 .us-pill-danger {
   background: rgba(255, 77, 106, 0.14);
-  color: #ff8ba0;
+  color: var(--us-danger-text);
 }
 .us-pill-accent {
   background: var(--us-accent-soft);
-  color: #ff8a63;
+  color: var(--us-accent-text);
 }
 
 .us-status {
@@ -411,7 +458,7 @@ body:has(.us-root) {
   padding: 6px 14px;
   border-radius: 999px;
   border: 1px solid var(--us-line-strong);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--us-tint-2);
   font-family: var(--us-display);
   font-size: 12px;
   font-weight: 600;
@@ -485,17 +532,17 @@ body:has(.us-root) {
 .us-flash-ok {
   background: rgba(33, 212, 127, 0.1);
   border-color: rgba(33, 212, 127, 0.28);
-  color: #7ff0bb;
+  color: var(--us-live-text);
 }
 .us-flash-err {
   background: rgba(255, 77, 106, 0.1);
   border-color: rgba(255, 77, 106, 0.3);
-  color: #ffa3b4;
+  color: var(--us-danger-text);
 }
 .us-flash-info {
   background: var(--us-boost-soft);
-  border-color: rgba(124, 92, 255, 0.32);
-  color: #c0b0ff;
+  border-color: color-mix(in srgb, var(--us-boost) 32%, transparent);
+  color: var(--us-boost-text);
 }
 
 .us-empty {
@@ -503,7 +550,7 @@ body:has(.us-root) {
   text-align: center;
   border: 1px dashed var(--us-line-strong);
   border-radius: var(--us-radius);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--us-tint-2);
 }
 
 .us-empty-title {
@@ -559,6 +606,66 @@ body:has(.us-root) {
   color: var(--us-muted);
 }
 
+/* A team's race details on its link page: label left, value right. */
+.us-race {
+  display: grid;
+  margin: 0;
+  padding: 6px 18px;
+}
+
+.us-race > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--us-line);
+  font-size: 14px;
+}
+
+.us-race > div:last-child {
+  border-bottom: 0;
+}
+
+.us-race dt {
+  color: var(--us-muted);
+}
+
+.us-race dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+
+.us-race-gm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The gamemaster's initials, tinted with the team colour like the app bar. */
+.us-race-gm > i {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--team, var(--us-accent));
+  color: #fff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.us-race-muted {
+  color: var(--us-muted);
+  font-weight: 500;
+}
+
+.us-race + .us-panel-empty {
+  padding-top: 4px;
+  font-size: 13px;
+}
+
 .us-sechead {
   display: flex;
   align-items: flex-end;
@@ -583,11 +690,9 @@ body:has(.us-root) {
 
 .us-avatars {
   display: flex;
-  gap: -6px;
 }
 
-.us-avatars i,
-.us-avatar {
+.us-avatars i {
   display: inline-grid;
   place-items: center;
   width: 28px;
@@ -611,6 +716,81 @@ body:has(.us-root) {
 
 /* ---------------------------- 4. Public site ---------------------------- */
 
+/* Headlines pick out one phrase in red, the race colour, in the same face as
+   the rest of the line: upright and easy to read at a glance, not a script. */
+.us-root h1 em,
+.us-root h2 em {
+  font-family: inherit;
+  font-style: normal;
+  font-weight: inherit;
+  color: var(--us-accent);
+}
+
+.us-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--us-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--us-accent);
+}
+
+.us-kicker::before {
+  content: "";
+  width: 22px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+/* Small red text on navy needs the lighter red to pass contrast. */
+.us-kicker.is-light {
+  color: var(--us-accent-text);
+}
+
+.us-textlink {
+  display: inline-block;
+  padding-bottom: 3px;
+  border-bottom: 2px solid var(--us-accent);
+  font-family: var(--us-display);
+  font-weight: 600;
+  transition: color 0.15s ease;
+}
+
+.us-textlink:hover {
+  color: var(--us-accent-text);
+}
+
+/* `.us-root a { color: inherit }` outranks a single class, so a button that
+   is a link has to claim its text colour back — or it takes the section's. */
+.us-root a.us-btn-primary {
+  color: #fff;
+}
+
+.us-root a.us-btn-ghost {
+  color: var(--us-text);
+}
+
+.us-root a.us-btn-light {
+  color: var(--tl-ink);
+}
+
+.us-btn-light {
+  background: #fff;
+  color: var(--tl-ink);
+  box-shadow: 0 14px 30px -14px rgba(6, 19, 41, 0.55);
+}
+
+.us-btn-light:hover {
+  background: var(--tl-cream);
+}
+
+/* Top bar. Sticky on every public page; the ground comes from the tokens, so
+   it's navy over the landing page and cream over the booking form. */
+
 .us-topbar {
   position: sticky;
   top: 0;
@@ -618,310 +798,2386 @@ body:has(.us-root) {
   display: flex;
   align-items: center;
   gap: 20px;
-  padding: 14px 20px;
-  background: rgba(10, 11, 15, 0.82);
-  backdrop-filter: blur(14px);
+  padding: 12px 20px;
+  background: color-mix(in srgb, var(--us-bg) 86%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--us-line);
-}
-
-.us-wordmark {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-right: auto;
-}
-
-.us-wordmark-mark {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: var(--us-accent);
-  color: #fff;
-  font-family: var(--us-display);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.us-wordmark-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1;
-  font-family: var(--us-display);
-}
-
-.us-wordmark-text b {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.us-wordmark-text i {
-  font-style: normal;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: var(--us-accent);
 }
 
 .us-topbar-nav {
   display: none;
-  gap: 24px;
+  gap: 26px;
   font-size: 14px;
+  font-weight: 500;
   color: var(--us-muted);
+}
+
+.us-topbar-nav a {
+  transition: color 0.15s ease;
 }
 
 .us-topbar-nav a:hover {
   color: var(--us-text);
 }
 
-.us-hero {
+/* The lockup. Both layers share one grid cell, so the logo sits on top of
+   the words without either needing to know the other's size. */
+
+.us-lockup {
   position: relative;
-  overflow: hidden;
-  padding: clamp(48px, 9vw, 110px) 0 clamp(40px, 7vw, 80px);
+  display: inline-grid;
+  flex: none;
+  margin-right: auto;
+  isolation: isolate;
 }
 
-.us-hero-inner {
-  position: relative;
-  z-index: 2;
-  max-width: var(--us-shell);
-  margin: 0 auto;
-  padding: 0 20px;
+.us-lockup > * {
+  grid-area: 1 / 1;
 }
 
-/* Perspective floor: reads as a city grid rushing away, and costs one
-   gradient rather than an image. */
-.us-hero-grid {
-  position: absolute;
-  inset: auto -20% -10% -20%;
-  height: 60%;
-  background-image: linear-gradient(rgba(255, 77, 28, 0.16) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 77, 28, 0.16) 1px, transparent 1px);
-  background-size: 56px 56px;
-  transform: perspective(320px) rotateX(62deg);
-  mask-image: linear-gradient(to bottom, transparent, #000 60%, transparent);
-  opacity: 0.6;
+.us-lockup-logo {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.us-lockup-back {
+  z-index: 0;
+  font-family: var(--us-display);
+  font-weight: inherit;
+  text-transform: uppercase;
+  white-space: nowrap;
   pointer-events: none;
 }
 
-.us-hero::after {
+/* Small: a slanted red ribbon tucked under the logo. The "p" of Traveloop
+   drops over its edge, which is what puts the event behind the brand. */
+.us-lockup-sm {
+  width: 136px;
+}
+
+.us-lockup-sm .us-lockup-back {
+  grid-area: 2 / 1;
+  justify-self: end;
+  margin: -4px 6px 0 0;
+  padding: 2px 8px 2px 10px;
+  background: var(--us-accent);
+  color: #fff;
+  font-size: 8.5px;
+  line-height: 1.3;
+  letter-spacing: 0.3em;
+  transform: skewX(-14deg);
+  border-radius: 2px;
+}
+
+/* Large: the same ribbon at poster size, for the entrance and its loader.
+   Everything is a fraction of --L, the logo's width, so the ribbon keeps
+   its place under the "p" at any size. */
+.us-lockup-lg {
+  width: var(--L, 600px);
+  margin: 0;
+}
+
+.us-lockup-lg .us-lockup-back {
+  grid-area: 2 / 1;
+  justify-self: end;
+  margin: calc(var(--L, 600px) * -0.03) calc(var(--L, 600px) * 0.044) 0 0;
+  padding: 0.22em 0.9em 0.22em 1.15em;
+  background: var(--us-accent);
+  color: #fff;
+  font-size: calc(var(--L, 600px) * 0.0625);
+  line-height: 1.3;
+  letter-spacing: 0.3em;
+  transform: skewX(-14deg);
+  border-radius: calc(var(--L, 600px) * 0.012);
+  box-shadow: 0 10px 30px -12px rgba(120, 10, 30, 0.7);
+}
+
+/* The landing page: poster, sign-up, board. `clip` rather than `hidden`, so
+   nothing decorative can make the page scroll sideways — without breaking
+   the sticky bar. */
+
+.us-landing {
+  --us-nav-h: 64px;
+  overflow-x: clip;
+}
+
+/* Section links land below the sticky bar, not under it. */
+.us-landing section[id] {
+  scroll-margin-top: var(--us-nav-h);
+}
+
+/* The bar (SprintNav.tsx). Glass over navy, and a fixed height. */
+
+.us-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: var(--us-nav-h);
+  background: rgba(6, 19, 41, 0.78);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border-bottom: 1px solid var(--us-line);
+  transition: background 0.2s ease, box-shadow 0.2s ease, translate 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.4s ease, visibility 0.5s;
+}
+
+.us-nav.is-scrolled {
+  background: rgba(6, 19, 41, 0.94);
+  box-shadow: 0 12px 32px -20px rgba(0, 0, 0, 0.9);
+}
+
+.us-nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 100%;
+  padding: 0 16px;
+}
+
+.us-nav-end {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.us-nav-live {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--us-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--us-live-text);
+}
+
+.us-nav-live::before {
   content: "";
-  position: absolute;
-  top: -30%;
-  left: 50%;
-  width: 720px;
-  height: 720px;
-  transform: translateX(-50%);
-  background: radial-gradient(circle, rgba(255, 77, 28, 0.16), transparent 62%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--us-live);
+  box-shadow: 0 0 0 3px rgba(47, 208, 138, 0.2);
+  animation: usPulse 1.6s ease-in-out infinite;
+}
+
+/* The poster's slanted strokes: a parallelogram, not a pill. */
+.us-nav-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 42px;
+  padding: 0 22px 0 24px;
+  background: var(--us-accent);
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+  font-family: var(--us-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  transition: background 0.16s ease, transform 0.16s ease;
+}
+
+.us-root a.us-nav-cta {
+  color: #fff;
+}
+
+.us-nav-cta:hover {
+  background: var(--us-accent-hover);
+  transform: translateX(2px);
+}
+
+.us-nav-cta .us-chevrons i {
+  width: 7px;
+  height: 11px;
+}
+
+/* On the way into the game the bar stays out of the sky: it drops in with
+   the board, and goes again if the visitor climbs back up. */
+.us-landing:has(.us-stage:not(.is-play)) .us-nav {
+  translate: 0 -100%;
+  opacity: 0;
+  visibility: hidden;
   pointer-events: none;
 }
 
-.us-hero-eyebrow {
+/* The entrance (GameEntrance.tsx): load in like a game, start in the sky,
+   fall through the clouds onto George Town, and land on the board.
+
+   The section is several screens tall; the stage inside it is pinned to the
+   viewport while the visitor scrolls through, and the script turns scroll
+   position into three variables on the stage:
+
+     --fly    0 → 1  the clouds parting and rushing past
+     --sky    1 → 0  the dusk sky fading off the map
+     --wash   0 → 1 → 0  the warm white-out in the middle of the cloud
+
+   Everything else (chapters, camera, hologram, monuments) the script sets
+   directly. Layers, bottom to top:
+
+     map 0 · monuments 1–11 · scrim 12 · sky 14 · title 18 · front clouds 19
+     · chapters 23 · steps 24 · board copy 20 / card 21 · boot 100
+
+   Gold and red are the race's own colours, the yellow-and-red of a route
+   marker. The map is all navy, so the monuments, the stations and the
+   hologram are the only warm things on it. */
+
+.us-entrance {
+  position: relative;
+  height: 820svh;
+  /* Under the sticky bar from the first pixel, so the sky fills the screen. */
+  margin-top: calc(-1 * var(--us-nav-h));
+}
+
+.us-stage {
+  --fly: 0;
+  --sky: 1;
+  --wash: 0;
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  min-height: 560px;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(90% 70% at 62% 48%, rgba(36, 71, 152, 0.45), transparent 70%),
+    linear-gradient(rgba(186, 205, 245, 0.06) 1px, transparent 1px) 0 0 / 44px 44px,
+    linear-gradient(90deg, rgba(186, 205, 245, 0.06) 1px, transparent 1px) 0 0 / 44px 44px,
+    var(--tl-navy);
+}
+
+/* Two classes, to outrank MapLibre's own `.maplibregl-map { position: relative }`. */
+.us-stage .us-map {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+}
+
+.us-stage.is-ready .us-map {
+  opacity: 1;
+}
+
+.us-stage.is-failed .us-map {
+  display: none;
+}
+
+/* On the way down the camera belongs to the scroll. */
+.us-stage:not(.is-play) .us-map {
+  pointer-events: none;
+}
+
+/* Legibility for the words over the map (top on a phone, left from a laptop
+   up) and the card (bottom). Pointer-transparent, so the landmarks under it
+   still take a tap. */
+.us-map-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(6, 19, 41, 0.95) 0%,
+    rgba(6, 19, 41, 0.72) 34%,
+    rgba(6, 19, 41, 0) 54%,
+    rgba(6, 19, 41, 0) 60%,
+    rgba(6, 19, 41, 0.88) 100%
+  );
+}
+
+.us-stage .maplibregl-ctrl-bottom-right {
+  z-index: 13;
+}
+
+/* The credits, folded to a quiet ⓘ in the corner until tapped. */
+.us-stage .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) {
+  opacity: 0.45;
+  transition: opacity 0.2s ease;
+}
+
+.us-stage .maplibregl-ctrl-attrib.maplibregl-compact:hover {
+  opacity: 1;
+}
+
+/* ---------------------------------------------------------------- sky */
+
+.us-sky,
+.us-sky-front {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Dusk over the Strait: night blue overhead, gold at the horizon. */
+.us-sky {
+  z-index: 14;
+  opacity: var(--sky);
+  background:
+    radial-gradient(1.5px 1.5px at 12% 8%, #fff, transparent),
+    radial-gradient(1px 1px at 28% 16%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 46% 6%, #fff, transparent),
+    radial-gradient(1px 1px at 63% 13%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 81% 7%, #fff, transparent),
+    radial-gradient(1px 1px at 92% 19%, #fff, transparent),
+    radial-gradient(1px 1px at 6% 22%, #fff, transparent),
+    linear-gradient(
+      180deg,
+      #0a1840 0%,
+      #1c2d6b 26%,
+      #4e4a8e 48%,
+      #b9728d 68%,
+      #f5a275 84%,
+      #ffd08a 100%
+    );
+}
+
+.us-sky-sun {
+  position: absolute;
+  left: 50%;
+  top: 80%;
+  width: 90vmax;
+  height: 90vmax;
+  translate: -50% -50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 244, 220, 0.95) 0 3%,
+    rgba(255, 210, 140, 0.6) 7%,
+    rgba(255, 170, 110, 0.2) 22%,
+    transparent 48%
+  );
+}
+
+.us-sky-front {
+  z-index: 19;
+}
+
+/* Each cloud parts to its own side, rises past the camera and swells as we
+   fall through it; --depth sets how hard. */
+.us-cloud {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--w);
+  translate: calc(var(--dir) * var(--fly) * var(--depth) * 55vw)
+    calc(var(--fly) * var(--depth) * -60vh);
+  scale: calc(1 + var(--fly) * var(--depth) * 1.8);
+  opacity: calc(1 - var(--fly) * var(--fly) * 1.15);
+  will-change: translate, scale, opacity;
+}
+
+/* A phone is narrow and tall: the same clouds, drawn bigger, fill its sky. */
+@media (max-width: 639px) {
+  .us-cloud {
+    width: calc(var(--w) * 2.1);
+    margin-left: calc(var(--w) * -0.5);
+  }
+}
+
+.us-cloud img {
+  display: block;
+  width: 100%;
+  height: auto;
+  animation: usCloudDrift var(--drift) ease-in-out infinite alternate;
+}
+
+/* Past the white-out every sky layer is at zero (GameEntrance.tsx sets
+   is-past-sky): hidden, not removed, so scrolling back up doesn't replay
+   their entrance, and their drift paused so it stops costing frames. */
+.us-stage.is-past-sky :is(.us-sky, .us-sky-front) {
+  visibility: hidden;
+}
+
+.us-stage.is-past-sky .us-cloud {
+  will-change: auto;
+}
+
+.us-stage.is-past-sky .us-cloud img,
+.us-stage.is-offscreen *,
+.us-stage.is-offscreen *::before,
+.us-stage.is-offscreen *::after {
+  animation-play-state: paused;
+}
+
+/* The white-out in the middle of the cloud, which also hides the moment the
+   sky gives way to the map. */
+.us-sky-wash {
+  position: absolute;
+  inset: 0;
+  opacity: calc(var(--wash) * 0.94);
+  background: radial-gradient(ellipse at 50% 55%, #fff6ee 0%, #f6dcd2 45%, #cbb8de 100%);
+}
+
+/* -------------------------------------------------------- the loader */
+
+.us-boot {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--tl-navy);
+  color: #fff;
+  transition: opacity 0.45s ease, visibility 0.45s;
+}
+
+/* Full: a plain fade onto the landing page underneath. */
+.us-boot.is-leaving {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.us-boot-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: min(360px, calc(100% - 48px));
+}
+
+.us-boot-lockup {
+  --L: clamp(200px, 56vw, 320px);
+  margin-bottom: 14px;
+}
+
+.us-boot-bar {
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Scaled, not resized, so filling the bar never lays anything out. */
+.us-boot-bar i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--us-accent);
+  transform: scaleX(var(--boot, 0));
+  transform-origin: left;
+}
+
+.us-boot-pct {
+  font-family: var(--us-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  color: var(--us-muted);
+}
+
+/* ------------------------------------------------------------ the rail */
+
+.us-steps {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.5s ease, visibility 0.5s;
+}
+
+.us-stage.is-entered:not(.is-play) .us-steps {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* The chapter rail: where you are in the story. */
+.us-steps {
+  display: none;
+}
+
+.us-skip {
+  position: absolute;
+  z-index: 25;
+  right: 12px;
+  bottom: 40px;
+  padding: 9px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(6, 19, 41, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   font-family: var(--us-display);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--us-muted);
+  color: #fff;
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease;
+  animation: usFade 0.4s ease;
 }
 
-.us-hero-title {
+.us-skip:hover {
+  border-color: var(--us-gold);
+  color: var(--us-gold);
+}
+
+/* ----------------------------------------------------------- chapters */
+
+.us-chapter {
+  position: absolute;
+  z-index: 23;
+  top: calc(var(--us-nav-h) + 20px);
+  left: 20px;
+  right: 20px;
   display: flex;
   flex-direction: column;
-  margin: 18px 0 0;
-  font-size: clamp(52px, 15vw, 148px);
-  line-height: 0.86;
-  letter-spacing: -0.045em;
-  text-transform: uppercase;
+  gap: 14px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  will-change: opacity, transform;
 }
 
-/* The outline second word is the whole logotype idea: solid word, hollow
-   word, the race between them. */
-.us-hero-title-out {
-  color: transparent;
-  -webkit-text-stroke: 1.5px var(--us-accent);
-  padding-left: 0.08em;
+/* A soft pool of night behind the words, for when they cross a bright
+   cloud. Inside the chapter's own layer, so it moves and fades with it. */
+.us-chapter:not(.is-title)::before {
+  content: "";
+  position: absolute;
+  inset: -70px -90px;
+  z-index: -1;
+  background: radial-gradient(closest-side, rgba(6, 19, 41, 0.55), rgba(6, 19, 41, 0));
+  pointer-events: none;
 }
 
-.us-hero-tagline {
-  max-width: 46ch;
+/* 01 plays out over the open sky, so it takes the middle of the screen,
+   the darkest band between the clouds above and below, with a deeper pool
+   of night behind it. */
+.us-chapter.is-center {
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  padding: var(--us-nav-h) 20px 0;
+  text-align: center;
+}
+
+.us-chapter.is-center::before {
+  inset: 12% 0;
+  background: radial-gradient(closest-side, rgba(6, 19, 41, 0.68), rgba(6, 19, 41, 0));
+}
+
+.us-root .us-chapter.is-center h2 {
+  max-width: 16ch;
+}
+
+.us-chapter.is-center .us-chapter-lede {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(3, 11, 26, 0.9), 0 2px 18px rgba(3, 11, 26, 0.8);
+}
+
+/* Arriving from the loader: the sky settles, the near clouds sweep in from
+   past the camera, and the title pops in piece by piece. Runs once, when
+   the stage is entered. */
+.us-stage.is-entered .us-sky {
+  animation: usSkyIn 2.2s cubic-bezier(0.2, 0.7, 0.2, 1) 0.2s both;
+}
+
+.us-stage.is-entered .us-sky-front {
+  animation: usCloudsIn 2s cubic-bezier(0.16, 0.8, 0.2, 1) 0.25s both;
+}
+
+.us-stage.is-entered .us-chapter.is-title > * {
+  animation: usTitleUp 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.us-stage.is-entered .us-chapter.is-title > .us-hero-kicker {
+  animation-delay: 0.75s;
+}
+
+.us-stage.is-entered .us-chapter.is-title > .us-title {
+  animation: usTitlePop 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.45s both;
+}
+
+.us-stage.is-entered .us-chapter.is-title > .us-title-sub {
+  animation-delay: 0.95s;
+}
+
+.us-stage.is-entered .us-chapter.is-title > .us-scrollcue {
+  animation-delay: 1.15s;
+}
+
+@keyframes usSkyIn {
+  from {
+    scale: 1.14;
+  }
+}
+
+@keyframes usCloudsIn {
+  from {
+    scale: 1.7;
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@keyframes usTitleUp {
+  from {
+    opacity: 0;
+    translate: 0 18px;
+  }
+}
+
+@keyframes usTitlePop {
+  0% {
+    opacity: 0;
+    scale: 0.7;
+    rotate: -3deg;
+  }
+  55% {
+    opacity: 1;
+    scale: 1.05;
+    rotate: 0.5deg;
+  }
+  100% {
+    scale: 1;
+    rotate: 0deg;
+  }
+}
+
+/* The title sits between the back clouds and the front ones. */
+.us-chapter.is-title {
+  z-index: 18;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  padding: var(--us-nav-h) 20px 18vh;
+  text-align: center;
+  opacity: 1;
+  visibility: visible;
+}
+
+.us-title {
+  --L: clamp(280px, 62vw, 760px);
+  margin: 6px 0 4px;
+  filter: drop-shadow(0 12px 40px rgba(20, 16, 64, 0.5));
+}
+
+.us-root .us-title-sub {
+  max-width: 30ch;
+  font-size: clamp(16px, 2vw, 21px);
+  line-height: 1.4;
+  color: #fff;
+  text-shadow: 0 2px 16px rgba(20, 16, 64, 0.6);
+}
+
+.us-scrollcue {
+  text-shadow: 0 1px 10px rgba(20, 16, 64, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   margin-top: 22px;
-  font-size: clamp(16px, 2.2vw, 20px);
+  font-family: var(--us-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.us-scrollcue-mouse {
+  position: relative;
+  width: 22px;
+  height: 34px;
+  border: 2px solid #fff;
+  border-radius: 12px;
+}
+
+.us-scrollcue-mouse::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  width: 4px;
+  height: 7px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--us-gold);
+  animation: usScrollDot 1.6s ease-in-out infinite;
+}
+
+.us-chapter-num {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--us-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--us-gold);
+}
+
+.us-chapter-num::before {
+  content: "";
+  width: 26px;
+  height: 2px;
+  background: currentColor;
+}
+
+.us-root .us-chapter h2 {
+  max-width: 13ch;
+  font-size: clamp(34px, 5.4vw, 70px);
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+  text-shadow: 0 2px 30px rgba(3, 11, 26, 0.6);
+}
+
+.us-root .us-chapter-lede {
+  max-width: 44ch;
+  font-size: 15px;
+  line-height: 1.55;
+  color: #e3e8f2;
+  text-shadow: 0 1px 14px rgba(3, 11, 26, 0.8);
+}
+
+/* 02: three facts about the field, ruled in the hologram's red. */
+.us-root .us-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 26px;
+  margin-top: 4px;
+}
+
+.us-facts li {
+  display: flex;
+  flex-direction: column;
+  padding-left: 12px;
+  border-left: 2px solid #ff3b4b;
+}
+
+.us-facts b {
+  font-family: var(--us-display);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+.us-facts span {
+  font-size: 12px;
+  color: #cdd6e7;
+}
+
+/* 03: the legend. Each row is a kind of thing on the field, in its own
+   colour; it lights while its pins are landing and ticks when full. */
+.us-root .us-kinds {
+  display: grid;
+  gap: 6px;
+  max-width: 460px;
+  margin-top: 2px;
+}
+
+.us-kinds li {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(6, 19, 41, 0.55);
+  opacity: 0.45;
+  transition: opacity 0.3s ease, border-color 0.3s ease, background 0.3s ease;
+}
+
+.us-kinds li.is-loading {
+  opacity: 1;
+  border-color: var(--kind);
+  background: color-mix(in srgb, var(--kind) 16%, rgba(6, 19, 41, 0.7));
+}
+
+.us-kinds li.is-done {
+  opacity: 1;
+}
+
+.us-kind-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--kind);
+  color: var(--tl-navy);
+}
+
+.us-kind-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.us-kind-icon.is-landmark {
+  border-radius: 0;
+  background: none;
+}
+
+.us-kind-icon.is-landmark svg {
+  width: 30px;
+  height: 30px;
+}
+
+.us-kind-text {
+  min-width: 0;
+}
+
+.us-kind-text b {
+  display: block;
+  font-family: var(--us-display);
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.us-kind-text small {
+  display: block;
+  font-size: 11.5px;
   color: var(--us-muted);
 }
 
-.us-hero-status {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-top: 26px;
-}
-
-.us-hero-statusnote {
-  font-size: 13px;
-  color: var(--us-faint);
-}
-
-.us-hero-cta {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 28px;
-}
-
-.us-hero-stats {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1px;
-  margin: 44px 0 0;
-  background: var(--us-line);
-  border: 1px solid var(--us-line);
-  border-radius: var(--us-radius);
-  overflow: hidden;
-}
-
-.us-hero-stats div {
-  padding: 18px;
-  background: var(--us-bg-2);
-}
-
-.us-hero-stats dt {
+.us-kinds em {
   font-family: var(--us-display);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--us-faint);
-}
-
-.us-hero-stats dd {
-  margin: 8px 0 0;
-  font-family: var(--us-display);
-  font-size: clamp(28px, 5vw, 40px);
+  font-size: 12px;
+  font-style: normal;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
+  color: var(--kind);
 }
 
-.us-how {
-  padding: clamp(48px, 8vw, 96px) 0;
-  border-top: 1px solid var(--us-line);
+.us-kinds li.is-done em::after {
+  content: " ✓";
 }
 
-.us-how-title {
-  margin: 14px 0 34px;
-  font-size: clamp(28px, 4.6vw, 46px);
-  max-width: 18ch;
+.us-root .us-kinds-note {
+  font-size: 11.5px;
+  color: var(--us-faint);
 }
 
-.us-steps {
-  display: grid;
-  gap: 16px;
-}
-
-.us-step {
+/* The stations on the map: a pin in its kind's colour with the kind's icon.
+   Scaled with the monuments (--mon-scale), popped in by `scale`, so the two
+   never fight over one transform. */
+.us-stn {
   position: relative;
-  padding: 24px;
-  background: var(--us-surface);
-  border: 1px solid var(--us-line);
-  border-radius: var(--us-radius);
+  display: block;
+  width: 26px;
+  height: 30px;
+  pointer-events: none;
 }
 
-.us-step-num {
+.us-stn-pin {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--kind);
+  color: var(--tl-navy);
+  box-shadow:
+    0 0 0 2px rgba(6, 19, 41, 0.85),
+    0 6px 14px -4px rgba(0, 0, 0, 0.7),
+    0 0 18px color-mix(in srgb, var(--kind) 55%, transparent);
+  transform: scale(var(--mon-scale, 1));
+  transform-origin: 50% 115%;
+  transition: scale 0.5s cubic-bezier(0.3, 1.6, 0.5, 1), translate 0.5s cubic-bezier(0.3, 1.6, 0.5, 1),
+    opacity 0.3s ease;
+}
+
+.us-stn-pin svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* A dot of light where it stands. */
+.us-stn::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 10px;
+  height: 4px;
+  margin-left: -5px;
+  border-radius: 50%;
+  background: var(--kind);
+  box-shadow: 0 0 8px 2px color-mix(in srgb, var(--kind) 60%, transparent);
+  transition: opacity 0.3s ease;
+}
+
+.us-stn:not(.is-in) .us-stn-pin {
+  opacity: 0;
+  scale: 0.2;
+  translate: 0 -34px;
+}
+
+.us-stn:not(.is-in)::after {
+  opacity: 0;
+}
+
+.us-stage.is-play .us-stn-pin {
+  opacity: 0.8;
+}
+
+/* The hologram's tag over the field's north edge: red glass, scanlines,
+   a flicker. */
+.us-fieldtag {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 64px;
+  padding: 7px 14px 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 110, 120, 0.85);
+  border-radius: 4px;
+  background: rgba(60, 6, 16, 0.55);
+  box-shadow: 0 0 24px rgba(255, 59, 75, 0.5), inset 0 0 14px rgba(255, 59, 75, 0.3);
+  font-family: var(--us-display);
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #ffd0d4;
+  opacity: 0;
+  translate: 0 12px;
+  transition: opacity 0.5s ease, translate 0.5s ease;
+  pointer-events: none;
+}
+
+.us-fieldtag::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 3px);
+}
+
+.us-fieldtag b {
+  font-size: 12px;
+  font-weight: inherit;
+  letter-spacing: 0.3em;
+  color: #fff;
+  text-shadow: 0 0 10px #ff3b4b;
+}
+
+.us-fieldtag span {
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+}
+
+.us-fieldtag.is-on {
+  opacity: 1;
+  translate: 0 0;
+  animation: usHoloFlicker 4s linear infinite;
+}
+
+/* Keep scrolling: a nudge at the foot until the board is live. */
+.us-hint {
+  display: none;
+}
+
+@keyframes usHoloFlicker {
+  0%,
+  47%,
+  49%,
+  52%,
+  100% {
+    opacity: 1;
+  }
+  48% {
+    opacity: 0.55;
+  }
+  51% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes usHintBob {
+  50% {
+    translate: 0 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .us-fieldtag.is-on,
+  .us-hint-chev {
+    animation: none;
+  }
+}
+
+/* A phone: the legend in two tight columns, notes dropped, so the map keeps
+   the lower half of the screen. */
+@media (max-width: 639px) {
+  .us-root .us-kinds {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .us-kinds li {
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    gap: 6px;
+    padding: 4px 8px 4px 5px;
+    border-radius: 10px;
+  }
+
+  .us-kind-icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .us-kind-icon svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .us-kind-icon.is-landmark svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .us-kind-text b {
+    overflow: hidden;
+    font-size: 11.5px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .us-kind-text small,
+  .us-root .us-kinds-note {
+    display: none;
+  }
+
+  /* The tag would land on the chapter text, so a phone goes without it. */
+  .us-fieldtag {
+    display: none;
+  }
+
+  .us-root .us-chapter.is-loading .us-chapter-lede {
+    font-size: 13.5px;
+  }
+
+  .us-facts b {
+    font-size: 18px;
+  }
+}
+
+@media (min-width: 640px) {
+  .us-hint {
+    position: absolute;
+    z-index: 25;
+    left: 50%;
+    bottom: 22px;
+    translate: -50% 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--us-display);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.75);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+  }
+
+  .us-hint.is-on {
+    opacity: 1;
+  }
+
+  /* Only once a level has finished playing. */
+  .us-stage.is-gliding .us-hint.is-on {
+    opacity: 0;
+    transition-duration: 0.15s;
+  }
+
+  .us-hint-chev {
+    width: 10px;
+    height: 10px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    rotate: 45deg;
+    animation: usHintBob 1.4s ease-in-out infinite;
+  }
+}
+
+/* The board's own overlays wait until the board is live. */
+.us-hero-copy,
+.us-cp {
+  transition: opacity 0.7s ease, translate 0.7s cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0.7s;
+}
+
+.us-stage:not(.is-play) :is(.us-hero-copy, .us-cp) {
+  opacity: 0;
+  visibility: hidden;
+  translate: 0 24px;
+}
+
+/* ------------------------------------------------------------ copy */
+
+.us-hero-copy {
+  position: absolute;
+  z-index: 20;
+  top: var(--us-nav-h);
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 20px 0;
+  pointer-events: none;
+}
+
+.us-hero-copy > * {
+  pointer-events: auto;
+}
+
+.us-hero-kicker,
+.us-cp-tag {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--us-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--us-gold);
+}
+
+.us-root .us-board-title {
+  max-width: 11ch;
+  font-size: clamp(38px, 7.2vw, 88px);
+  line-height: 0.95;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+  text-shadow: 0 2px 30px rgba(3, 11, 26, 0.7);
+}
+
+.us-hero-lede {
+  max-width: 46ch;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #cdd6e7;
+  text-shadow: 0 1px 12px rgba(3, 11, 26, 0.8);
+}
+
+.us-root .us-hero-stats {
+  display: none;
+}
+
+.us-hero-stats li {
+  display: flex;
+  flex-direction: column;
+  padding-left: 12px;
+  border-left: 2px solid var(--us-gold);
+}
+
+.us-hero-stats b {
+  font-family: var(--us-display);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: #fff;
+}
+
+.us-hero-stats span {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--us-muted);
+}
+
+/* The bar keeps Sign up on a phone, and the sign-up band is right below, so
+   the hero's own buttons only join from a tablet up. */
+.us-hero-ctas {
+  display: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 22px;
+  margin-top: 8px;
+}
+
+.us-hero-btn {
+  position: relative;
+  padding: 0 28px;
+  box-shadow: 0 18px 40px -16px var(--us-accent);
+}
+
+.us-root a.us-hero-link {
+  padding-bottom: 2px;
+  border-bottom: 2px solid var(--us-gold);
+  font-family: var(--us-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.us-hero-link:hover {
+  color: var(--us-gold);
+}
+
+/* -------------------------------------------------------- clue card */
+
+/* A game's target card: the landmark the tour (or the visitor) has picked,
+   locked in a reticle, with a segmented bar for how far round the course the
+   tour has got. Gold, like the landmark pins on the map. */
+.us-cp {
+  position: absolute;
+  z-index: 21;
+  left: 12px;
+  right: 12px;
+  bottom: 34px;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgba(255, 201, 77, 0.1), transparent 60%),
+    linear-gradient(180deg, rgba(14, 34, 68, 0.92), rgba(6, 19, 41, 0.94));
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  border: 1px solid rgba(255, 201, 77, 0.3);
+  border-radius: 18px;
+  box-shadow:
+    0 0 0 1px rgba(6, 19, 41, 0.6),
+    0 24px 60px -24px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Phones and tablets: no glass over the map. A backdrop blur re-samples
+   the WebGL canvas on every frame it moves, which a phone's GPU pays for in
+   dropped frames; a near-solid ground reads the same at this size. */
+@media (max-width: 1023px) {
+  .us-nav,
+  .us-nav.is-scrolled {
+    background: rgba(6, 19, 41, 0.96);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .us-cp {
+    background:
+      radial-gradient(120% 60% at 0% 0%, rgba(255, 201, 77, 0.1), transparent 60%),
+      linear-gradient(180deg, rgb(14, 34, 68), rgb(6, 19, 41));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .us-skip {
+    background: rgba(6, 19, 41, 0.9);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* A lit edge along the top, gold into race red. */
+.us-cp::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 18px;
+  right: 18px;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(90deg, transparent, var(--us-gold) 20%, var(--us-accent) 80%, transparent);
+  box-shadow: 0 0 14px rgba(255, 201, 77, 0.5);
+}
+
+.us-cp-media {
+  position: relative;
+  align-self: start;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--us-surface-2);
+  isolation: isolate;
+}
+
+.us-cp-photo {
+  position: absolute;
+  inset: 0;
+  animation: usCpIn 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.us-cp-photo img {
+  object-fit: cover;
+}
+
+/* A little night falls on the photo's lower edge, where the badge sits. */
+.us-cp-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(6, 19, 41, 0) 55%, rgba(6, 19, 41, 0.75) 100%);
+}
+
+.us-cp-photo.is-course {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.us-cp-photo.is-course img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* The reticle: four gold corners that close in on the target. */
+.us-cp-reticle {
+  --c: rgba(255, 201, 77, 0.95);
+  --l: 14px;
+  position: absolute;
+  z-index: 2;
+  inset: 7px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--c), var(--c)) top left / var(--l) 2px,
+    linear-gradient(var(--c), var(--c)) top left / 2px var(--l),
+    linear-gradient(var(--c), var(--c)) top right / var(--l) 2px,
+    linear-gradient(var(--c), var(--c)) top right / 2px var(--l),
+    linear-gradient(var(--c), var(--c)) bottom left / var(--l) 2px,
+    linear-gradient(var(--c), var(--c)) bottom left / 2px var(--l),
+    linear-gradient(var(--c), var(--c)) bottom right / var(--l) 2px,
+    linear-gradient(var(--c), var(--c)) bottom right / 2px var(--l);
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 4px rgba(255, 201, 77, 0.6));
+  animation: usCpLock 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) 0.1s both;
+}
+
+/* One pass of the scanner, like the one that swept the field. */
+.us-cp-scan {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 36%;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 201, 77, 0) 0%,
+    rgba(255, 201, 77, 0.28) 92%,
+    rgba(255, 230, 160, 0.9) 100%
+  );
+  opacity: 0;
+  animation: usCpScan 1s ease-in-out 0.25s both;
+}
+
+/* What the target is, with the monument that marks it on the map. On a
+   phone's thumbnail it's the badge alone; the big photo adds the label. */
+.us-cp-type {
+  position: absolute;
+  z-index: 3;
+  right: 5px;
+  bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  animation: usCpPop 0.5s cubic-bezier(0.3, 1.5, 0.5, 1) 0.45s both;
+}
+
+.us-cp-type > span {
+  display: none;
+}
+
+.us-cp-badge {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 3px;
+  border: 1.5px solid var(--us-gold);
+  border-radius: 9px;
+  background: rgba(6, 19, 41, 0.9);
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.8);
+}
+
+.us-cp-badge svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Laid out (so the browser fetches it) but never seen. */
+.us-cp-next {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.us-cp-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.us-cp-tag {
+  gap: 7px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+
+.us-cp-tag b {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: #fff;
+}
+
+.us-cp-of {
+  margin-left: -3px;
+  letter-spacing: 0.04em;
+  color: var(--us-muted);
+}
+
+/* The live dot: the target the map is on right now. */
+.us-cp-dot {
+  position: relative;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--us-gold);
+}
+
+.us-cp-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--us-gold);
+  animation: usCpPing 1.6s ease-out infinite;
+}
+
+.us-root .us-cp-name {
+  font-size: 18px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.us-cp-blurb {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #c4cee0;
+}
+
+.us-cp-ctrl {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.us-cp-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--us-line-strong);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--us-text);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.12s ease;
+}
+
+.us-cp-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.96);
+}
+
+.us-cp-btn:not(.is-play) {
+  display: none;
+}
+
+.us-cp-btn:hover:not(:disabled) {
+  border-color: var(--us-gold);
+  color: var(--us-gold);
+}
+
+/* The play button is the game pad's main key: gold, with a hard edge under it. */
+.us-cp-btn.is-play {
+  border-color: transparent;
+  background: var(--us-gold);
+  color: var(--tl-navy);
+  box-shadow: 0 3px 0 #b8870c, 0 8px 18px -6px rgba(255, 201, 77, 0.6);
+}
+
+.us-cp-btn.is-play:hover:not(:disabled) {
+  background: #ffd76e;
+  color: var(--tl-navy);
+}
+
+.us-cp-btn.is-play:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #b8870c, 0 4px 10px -6px rgba(255, 201, 77, 0.6);
+}
+
+.us-cp-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* The course as a segmented bar, one segment per landmark. Each is a button
+   with a tall hit area and a slim bar drawn inside it. */
+.us-root .us-cp-rail {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+  margin-left: 6px;
+}
+
+.us-cp-rail li {
+  flex: 1;
+}
+
+.us-cp-rail button {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.us-cp-rail button::before,
+.us-cp-rail button::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 6px;
+  border-radius: 3px;
+  translate: 0 -50%;
+  transition: height 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+}
+
+.us-cp-rail button::before {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.us-cp-rail button::after {
+  background: var(--us-gold);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.us-cp-rail button:hover::before {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.us-cp-rail button.is-done::after {
+  transform: scaleX(1);
+  opacity: 0.5;
+}
+
+.us-cp-rail button.is-active::before,
+.us-cp-rail button.is-active::after {
+  height: 10px;
+}
+
+.us-cp-rail button.is-active::after {
+  transform: scaleX(1);
+  box-shadow: 0 0 10px rgba(255, 201, 77, 0.7);
+}
+
+/* While the tour plays, the current segment is its countdown. */
+.us-cp-rail.is-touring button.is-active::after {
+  animation: usCpFill var(--cp-dwell, 8s) linear both;
+}
+
+.us-cp-btn:focus-visible,
+.us-cp-rail button:focus-visible,
+.us-pin:focus-visible .us-mon-art {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+@keyframes usCpLock {
+  from {
+    inset: -4px;
+    opacity: 0;
+  }
+}
+
+@keyframes usCpScan {
+  0% {
+    opacity: 1;
+    translate: 0 -100%;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    translate: 0 280%;
+  }
+}
+
+@keyframes usCpPop {
+  from {
+    opacity: 0;
+    scale: 0.4;
+  }
+}
+
+@keyframes usCpPing {
+  to {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+}
+
+@keyframes usCpFill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* -------------------------------------------------------- monuments */
+
+/* One little monument per landmark (monuments.ts), standing on its spot.
+   The button keeps a fixed box, anchored at its foot; what's drawn inside
+   scales with the map's zoom (--mon-scale, set by GameEntrance.tsx) from that
+   same foot, so a monument never slides off its landmark. */
+.us-pin {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.us-mon {
+  position: absolute;
+  inset: 0;
+  transform: scale(var(--mon-scale, 1));
+  transform-origin: 50% 100%;
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1.3);
+}
+
+.us-mon-art {
+  position: absolute;
+  inset: 0;
+}
+
+.us-mon-art svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 7px 6px rgba(0, 0, 0, 0.55));
+  animation: usMonBob 3.4s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * -0.37s);
+}
+
+/* The number, on a route-marker badge: gold over red. */
+.us-mon-num {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, var(--us-gold) 0 50%, var(--us-accent) 50% 100%);
+  box-shadow: 0 4px 10px -4px rgba(0, 0, 0, 0.8);
+  font-family: var(--us-display);
+  font-size: 10px;
+  font-weight: inherit;
+  line-height: 1.2;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.us-pin-base {
+  position: absolute;
+  left: 50%;
+  bottom: -3px;
+  width: 44px;
+  height: 10px;
+  margin-left: -22px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 201, 77, 0.75), rgba(255, 201, 77, 0));
+}
+
+.us-pin-name {
+  position: absolute;
+  bottom: calc(64px * var(--mon-scale, 1) + 8px);
+  left: 50%;
+  z-index: 1;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--tl-navy);
   font-family: var(--us-display);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.16em;
-  color: var(--us-accent);
+  white-space: nowrap;
+  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  transform: translate(-50%, 6px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
 }
 
-.us-step h3 {
-  margin: 14px 0 8px;
-  font-size: 18px;
+.us-pin:hover .us-mon {
+  transform: scale(calc(var(--mon-scale, 1) * 1.12));
 }
 
-.us-step p {
-  font-size: 14px;
-  color: var(--us-muted);
+.us-pin.is-active .us-mon {
+  transform: scale(calc(var(--mon-scale, 1) * 1.4));
 }
 
-.us-mathcard {
-  margin-top: 32px;
-  padding: 26px;
-  background: linear-gradient(180deg, rgba(124, 92, 255, 0.09), transparent);
-  border: 1px solid rgba(124, 92, 255, 0.28);
-  border-radius: var(--us-radius-lg);
+.us-pin.is-active .us-pin-name {
+  bottom: calc(64px * var(--mon-scale, 1) * 1.4 + 8px);
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
-.us-math {
-  margin: 18px 0 14px;
+.us-pin.is-active .us-pin-base {
+  background: radial-gradient(closest-side, rgba(232, 50, 63, 0.85), rgba(232, 50, 63, 0));
+  animation: usPinRing 1.6s ease-out infinite;
+}
+
+@keyframes usCpIn {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes usMonBob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes usPinRing {
+  0% {
+    transform: scale(0.7);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .us-mon-art svg,
+  .us-pin.is-active .us-pin-base,
+  .us-cp-photo,
+  .us-cp-reticle,
+  .us-cp-type,
+  .us-cp-dot::after {
+    animation: none;
+  }
+
+  .us-cp-scan {
+    display: none;
+  }
+
+  .us-stage .us-map {
+    transition: none;
+  }
+}
+
+@media (min-width: 640px) {
+  .us-hero-copy {
+    gap: 16px;
+    padding: 32px 28px 0;
+  }
+
+  .us-hero-lede {
+    font-size: 16px;
+  }
+
+  .us-hero-ctas {
+    display: flex;
+  }
+
+  .us-cp {
+    left: auto;
+    right: 20px;
+    width: 400px;
+  }
+
+  .us-cp-btn:not(.is-play) {
+    display: inline-grid;
+  }
+}
+
+@media (min-width: 1024px) {
+  .us-map-shade {
+    background:
+      linear-gradient(
+        90deg,
+        rgba(6, 19, 41, 0.94) 0%,
+        rgba(6, 19, 41, 0.78) 26%,
+        rgba(6, 19, 41, 0) 52%
+      ),
+      linear-gradient(180deg, rgba(6, 19, 41, 0) 70%, rgba(6, 19, 41, 0.6) 100%);
+  }
+
+  .us-hero-copy {
+    top: 50%;
+    right: auto;
+    width: min(560px, 44vw);
+    padding: 0 0 0 max(32px, calc((100vw - var(--us-shell)) / 2 + 20px));
+    transform: translateY(-54%);
+    box-sizing: content-box;
+  }
+
+  .us-hero-lede {
+    font-size: 17px;
+  }
+
+  .us-root .us-hero-stats {
+    display: flex;
+    gap: 26px;
+    margin-top: 6px;
+  }
+
+  .us-cp {
+    right: 32px;
+    bottom: 40px;
+    width: 400px;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px 16px 14px;
+  }
+
+  .us-cp-media {
+    aspect-ratio: 16 / 10;
+  }
+
+  .us-cp-reticle {
+    --l: 22px;
+    inset: 12px;
+  }
+
+  /* On the big photo the badge gets its label: a game's item-type chip. */
+  .us-cp-type {
+    left: 12px;
+    right: auto;
+    bottom: 12px;
+    padding: 4px 12px 4px 4px;
+    border: 1px solid rgba(255, 201, 77, 0.45);
+    border-radius: 12px;
+    background: rgba(6, 19, 41, 0.82);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .us-cp-type > span {
+    display: block;
+    font-family: var(--us-display);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--us-gold);
+  }
+
+  .us-cp-type .us-cp-badge {
+    width: 34px;
+    height: 34px;
+    border: 0;
+    box-shadow: none;
+    background: rgba(255, 201, 77, 0.12);
+  }
+
+  .us-root .us-cp-name {
+    font-size: 24px;
+  }
+
+  .us-cp-blurb {
+    font-size: 14px;
+  }
+}
+
+
+/* Loading checkpoints: each monument drops onto its spot as the scroll
+   reaches it, and lands with a flash of gold at its foot. */
+.us-mon {
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1.3), opacity 0.3s ease,
+    translate 0.6s cubic-bezier(0.3, 1.5, 0.5, 1), scale 0.6s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+
+.us-pin:not(.is-in) {
+  pointer-events: none;
+}
+
+.us-pin:not(.is-in) .us-mon {
+  opacity: 0;
+  translate: 0 -80px;
+  scale: 0.3;
+}
+
+.us-pin.is-in .us-pin-base {
+  animation: usLand 0.9s ease-out;
+}
+
+@keyframes usLand {
+  0% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+@keyframes usCloudDrift {
+  from {
+    transform: translateX(-2.5%);
+  }
+  to {
+    transform: translateX(2.5%);
+  }
+}
+
+@keyframes usScrollDot {
+  0% {
+    translate: 0 0;
+    opacity: 1;
+  }
+  80% {
+    translate: 0 12px;
+    opacity: 0;
+  }
+  100% {
+    translate: 0 0;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .us-cloud img,
+  .us-scrollcue-mouse::after,
+  .us-pin.is-in .us-pin-base {
+    animation: none;
+  }
+
+  /* The sky is simply there. */
+  .us-stage.is-entered :is(.us-sky, .us-sky-front, .us-chapter.is-title > *) {
+    animation: none;
+  }
+
+  /* Clouds fade on the way down rather than rushing past. */
+  .us-cloud {
+    translate: none;
+    scale: none;
+  }
+}
+
+@media (min-width: 640px) {
+  .us-skip {
+    right: 20px;
+  }
+
+  .us-chapter {
+    left: 28px;
+    right: 28px;
+    top: calc(var(--us-nav-h) + 32px);
+  }
+
+  .us-root .us-chapter-lede {
+    font-size: 17px;
+  }
+
+}
+
+@media (min-width: 1024px) {
+  .us-chapter:not(.is-title, .is-center) {
+    top: 50%;
+    right: auto;
+    left: max(32px, calc((100vw - var(--us-shell)) / 2 + 20px));
+    width: min(560px, 46vw);
+    translate: 0 -50%;
+  }
+
+  .us-steps {
+    position: absolute;
+    z-index: 24;
+    right: 32px;
+    top: 50%;
+    translate: 0 -50%;
+    display: block;
+    font-family: var(--us-display);
+  }
+
+  .us-root .us-steps ol {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .us-steps button {
+    display: flex;
+    align-items: center;
+    padding: 6px 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+  }
+
+  .us-steps li:hover {
+    color: #fff;
+  }
+
+  .us-steps li {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.4);
+    transition: color 0.3s ease;
+  }
+
+  .us-steps li::after {
+    content: "";
+    width: 16px;
+    height: 2px;
+    background: currentColor;
+    transition: width 0.3s ease, background 0.3s ease;
+  }
+
+  /* The name hangs off to the left, so the numbers stay in one column. */
+  .us-steps span {
+    position: absolute;
+    right: calc(100% + 10px);
+    white-space: nowrap;
+    opacity: 0;
+    translate: 6px 0;
+    transition: opacity 0.3s ease, translate 0.3s ease;
+  }
+
+  .us-steps li.is-done {
+    color: rgba(255, 201, 77, 0.75);
+  }
+
+  .us-steps li.is-active {
+    color: #fff;
+  }
+
+  .us-steps li.is-active span {
+    opacity: 1;
+    translate: 0 0;
+  }
+
+  .us-steps li.is-active::after {
+    width: 36px;
+    background: var(--us-gold);
+  }
+
+  .us-skip {
+    right: 32px;
+    bottom: 44px;
+  }
+}
+
+/* The poster's >>> chevrons, running — the big buttons' and the bar's. */
+.us-chevrons {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+.us-chevrons i {
+  width: 10px;
+  height: 15px;
+  background: currentColor;
+  clip-path: polygon(0 0, 45% 0, 100% 50%, 45% 100%, 0 100%, 55% 50%);
+  animation: usChevron 1.2s ease-in-out infinite;
+}
+
+.us-chevrons i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.us-chevrons i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* The screen after the board, where one scroll from it lands: the Booking
+   ID box and the leaderboard, one screen tall under the bar. */
+
+.us-after {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100svh - var(--us-nav-h));
+  background: var(--us-bg-2);
+}
+
+.us-after .us-find {
+  padding-top: 30px;
+  border-top: 0;
+}
+
+.us-after .us-board {
+  flex: 1;
+  padding: 24px 0 16px;
+}
+
+.us-after .us-sechead {
+  margin-bottom: 16px;
+}
+
+.us-after .us-board-foot {
+  margin-top: 14px;
+}
+
+/* Already booked? A slim card at the head of the board's ground: a racer's
+   way from here to their team page, by Booking ID (FindTeam.tsx). */
+
+.us-find {
+  padding: clamp(32px, 5vw, 56px) 0 0;
+  background: var(--us-bg-2);
   border-top: 1px solid var(--us-line);
 }
 
-.us-math-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+.us-find-card {
+  position: relative;
+  display: grid;
   gap: 16px;
-  padding: 13px 0;
-  border-bottom: 1px solid var(--us-line);
+  padding: 20px;
+  overflow: hidden;
+  background: var(--us-surface);
+  border: 1px solid var(--us-line);
+  border-radius: var(--us-radius-lg);
+}
+
+/* The race colour as a leading edge, like a ticket's stub. */
+.us-find-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--us-accent);
+}
+
+.us-find-copy {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.us-find-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: var(--us-accent-soft);
+  color: var(--us-accent-text);
+}
+
+.us-find-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.us-find-copy h2 {
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+
+.us-root .us-find-copy p {
+  margin-top: 2px;
   font-size: 14px;
   color: var(--us-muted);
 }
 
-.us-math-row b {
-  font-family: var(--us-display);
-  font-size: 18px;
-  font-variant-numeric: tabular-nums;
+.us-find-form {
+  display: flex;
+  gap: 10px;
+}
+
+.us-find-form input {
+  flex: 1;
+  min-width: 0;
+  min-height: 50px;
+  padding: 0 18px;
+  background: var(--us-surface-2);
+  border: 1px solid var(--us-line-strong);
+  border-radius: 999px;
   color: var(--us-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px; /* 16px: stops iOS zooming the page on focus */
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.us-math-row.is-bonus {
-  color: #c0b0ff;
+.us-find-form input::placeholder {
+  color: var(--us-faint);
 }
 
-.us-math-row.is-bonus b {
-  color: var(--us-boost);
+.us-find-form input:focus {
+  outline: none;
+  border-color: var(--us-accent);
+  box-shadow: 0 0 0 3px var(--us-accent-soft);
 }
 
-.us-math-row.is-total {
-  border-bottom: none;
-  color: var(--us-text);
+.us-find-form input[aria-invalid="true"] {
+  border-color: var(--us-danger);
 }
 
-.us-math-row.is-total b {
-  font-size: 30px;
-  color: var(--us-accent);
+.us-find-go {
+  flex: none;
+  min-height: 50px;
 }
 
-.us-math-note {
+.us-root .us-find-error {
+  padding: 12px 16px;
+  background: rgba(255, 77, 106, 0.1);
+  border: 1px solid rgba(255, 77, 106, 0.3);
+  border-radius: 12px;
+  font-size: 14px;
+  color: var(--us-danger-text);
+  animation: usFade 0.2s ease-out;
+}
+
+/* The board: who you'd be racing, and a last row left open for you. */
+
+.us-board {
+  padding: clamp(40px, 6vw, 72px) 0 clamp(64px, 9vw, 120px);
+  background: var(--us-bg-2);
+}
+
+.us-board .us-sechead h2 {
+  margin-top: 12px;
+  font-size: clamp(30px, 4.6vw, 52px);
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+}
+
+.us-board .us-boardviews {
+  margin-bottom: 0;
+}
+
+.us-root .us-board-foot {
+  max-width: 62ch;
+  margin-top: 22px;
   font-size: 13px;
   color: var(--us-faint);
 }
 
-.us-boardsection {
-  padding: clamp(44px, 7vw, 88px) 0;
-  border-top: 1px solid var(--us-line);
-  background: var(--us-bg-2);
+.us-lb-open {
+  display: grid;
+  grid-template-columns: 42px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+  padding: 14px 16px;
+  background: var(--us-accent-soft);
+  border: 1.5px dashed color-mix(in srgb, var(--us-accent) 60%, transparent);
+  border-radius: var(--us-radius);
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
 }
 
-.us-boardsection .us-btn-block {
-  margin-top: 20px;
+.us-lb-open:hover {
+  background: color-mix(in srgb, var(--us-accent) 24%, transparent);
+  border-color: var(--us-accent);
+  transform: translateY(-1px);
 }
+
+.us-lb-open-rank {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--us-accent);
+  color: #fff;
+  font-family: var(--us-display);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.us-lb-open-team {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.us-lb-open-team b {
+  font-family: var(--us-display);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.us-lb-open-team span {
+  font-size: 12px;
+  color: var(--us-muted);
+}
+
+.us-lb-open-go {
+  font-family: var(--us-display);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--us-accent-text);
+}
+
+/* Footer */
 
 .us-footer {
-  padding: 40px 0;
+  padding: 44px 0;
+  background: #040d1e;
   border-top: 1px solid var(--us-line);
 }
 
 .us-footer-inner {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   align-items: flex-start;
 }
 
@@ -937,9 +3193,135 @@ body:has(.us-root) {
 
 .us-footer-inner nav {
   display: flex;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 12px 20px;
   font-size: 13px;
   color: var(--us-muted);
+}
+
+.us-footer-inner nav a:hover {
+  color: var(--us-text);
+}
+
+/* The call to action's pulse: a ring that swells and fades. Drawn once and
+   moved with transform and opacity, so it never repaints the button — an
+   animated box-shadow repaints on every frame. */
+.us-hero-btn::after,
+.us-lb-open-rank::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px rgba(232, 50, 63, 0.7);
+  pointer-events: none;
+  animation: usCallout 2.4s ease-out infinite;
+}
+
+@keyframes usCallout {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.18, 1.45);
+  }
+}
+
+.us-lb-open-rank::after {
+  animation-name: usCalloutSquare;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .us-hero-btn::after,
+  .us-lb-open-rank::after {
+    content: none;
+  }
+}
+
+@keyframes usCalloutSquare {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+@keyframes usChevron {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@media (min-width: 640px) {
+  .us-topbar {
+    padding: 14px 28px;
+  }
+
+  .us-lockup-sm {
+    width: 150px;
+  }
+
+  .us-lockup-sm .us-lockup-back {
+    font-size: 9.5px;
+  }
+
+  .us-footer-inner {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+/* Two short nav links fit beside the lockup and the CTA from a tablet up. */
+@media (min-width: 640px) {
+  .us-topbar-nav {
+    display: flex;
+  }
+
+  .us-nav-inner {
+    padding: 0 24px;
+  }
+
+  .us-nav-live {
+    display: inline-flex;
+  }
+
+  .us-lb-open {
+    grid-template-columns: 46px 1fr auto;
+    padding: 16px 20px;
+  }
+}
+
+@media (min-width: 960px) {
+  .us-nav-inner {
+    padding: 0 32px;
+  }
+}
+
+@media (min-width: 1024px) {
+  /* One line: the ask on the left, the box on the right, the answer under
+     the box. */
+  .us-find-card {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 500px);
+    align-items: center;
+    gap: 12px 40px;
+    padding: 22px 28px;
+  }
+
+  .us-find-error {
+    grid-column: 2;
+  }
 }
 
 /* ---------------------------- 5. Leaderboard ---------------------------- */
@@ -979,7 +3361,7 @@ body:has(.us-root) {
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--us-tint);
   font-family: var(--us-display);
   font-size: 15px;
   font-weight: 700;
@@ -1025,6 +3407,43 @@ body:has(.us-root) {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+/* A team on the course right now: points and time so far (ResultsBoard). */
+.us-lb-racing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--us-live) 16%, transparent);
+  color: var(--us-live-text);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.us-lb-racing::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: us-racing-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes us-racing-pulse {
+  50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .us-lb-racing::before { animation: none; }
+}
+
+.us-lb-row.is-racing .us-lb-time {
+  color: var(--us-live-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .us-lb-meta {
@@ -1081,45 +3500,396 @@ body:has(.us-root) {
   color: var(--us-faint);
 }
 
-.us-boardpage {
-  padding: 32px 0 80px;
+/* The winners' podium (ResultsBoard `podium`, the landing page): first in
+   the middle and highest, second on the left, third on the right, each
+   standing on a block in its medal colour. The list keeps 1, 2, 3 order for
+   screen readers; only the grid reorders them. */
+.us-root .us-podium {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+  margin: 18px 0 16px;
+  border-bottom: 2px solid rgba(255, 201, 77, 0.28);
 }
 
-.us-boardpage-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin-bottom: 26px;
-}
-
-.us-boardpage-head h1 {
-  margin-top: 10px;
-  font-size: clamp(34px, 6vw, 56px);
-  text-transform: uppercase;
-  letter-spacing: -0.03em;
-}
-
-.us-boardpage-note {
-  margin-top: 8px;
-  color: var(--us-muted);
-  font-size: 14px;
-}
-
-.us-boardpage-status {
+.us-podium-spot {
+  --medal: var(--us-bronze);
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  font-size: 12px;
+  align-items: center;
+  min-width: 0;
+  text-align: center;
+}
+
+.us-podium-spot.is-m1 {
+  --medal: var(--us-gold);
+}
+
+.us-podium-spot.is-m2 {
+  --medal: var(--us-silver);
+}
+
+.us-podium-spot.is-p1 {
+  order: 2;
+}
+
+.us-podium-spot.is-p2 {
+  order: 1;
+}
+
+.us-podium-spot.is-p3 {
+  order: 3;
+}
+
+/* A spotlight on the leader. */
+.us-podium-spot.is-p1::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  left: 50%;
+  bottom: 30px;
+  width: 170%;
+  aspect-ratio: 1;
+  translate: -50% 0;
+  background: radial-gradient(closest-side, rgba(255, 201, 77, 0.2), transparent 72%);
+  pointer-events: none;
+}
+
+.us-podium-player {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0 2px 12px;
+}
+
+.us-podium-crown {
+  margin-bottom: -2px;
+  color: var(--us-gold);
+  filter: drop-shadow(0 4px 10px rgba(255, 201, 77, 0.55));
+  animation: usCrownBob 2.6s ease-in-out infinite;
+}
+
+/* The team's badge: its colour, ringed in its medal. */
+.us-podium-avatar {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 4px;
+  border: 3px solid var(--medal);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--team) 40%, var(--us-surface));
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--medal) 16%, transparent),
+    0 12px 26px -12px var(--medal);
+  font-family: var(--us-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+
+.us-podium-spot.is-p1 .us-podium-avatar {
+  width: 60px;
+  height: 60px;
+  font-size: 19px;
+}
+
+.us-podium-spot.is-mine .us-podium-avatar {
+  outline: 2px solid var(--us-accent);
+  outline-offset: 5px;
+}
+
+.us-root .us-podium-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 100%;
+  font-family: var(--us-display);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.us-root .us-podium-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+.us-root .us-podium-points {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  font-family: var(--us-display);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.us-podium-spot.is-p1 .us-podium-points {
+  font-size: 26px;
+  color: var(--us-gold);
+}
+
+.us-podium-points i {
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0;
   color: var(--us-faint);
 }
 
-.us-boardpage-foot {
-  margin-top: 26px;
-  font-size: 13px;
-  color: var(--us-faint);
-  max-width: 62ch;
+.us-root .us-podium-time {
+  font-family: var(--us-display);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--us-muted);
+}
+
+.us-root .us-podium-time.is-racing {
+  color: var(--us-live);
+}
+
+.us-podium-block {
+  position: relative;
+  display: grid;
+  place-items: start center;
+  width: 100%;
+  height: 62px;
+  padding-top: 8px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--medal) 45%, transparent);
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--medal) 30%, var(--us-surface)) 0%,
+    color-mix(in srgb, var(--medal) 6%, var(--us-bg-2)) 100%
+  );
+  box-shadow: inset 0 3px 0 var(--medal);
+}
+
+.us-podium-spot.is-p1 .us-podium-block {
+  height: 100px;
+}
+
+.us-podium-spot.is-p2 .us-podium-block {
+  height: 78px;
+}
+
+/* Now and then a glint crosses each block, one after the other. */
+.us-podium-block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.16) 50%, transparent 62%);
+  translate: -100% 0;
+  animation: usSheen 6s ease-in-out infinite;
+}
+
+.us-podium-spot.is-p1 .us-podium-block::after {
+  animation-delay: 0.5s;
+}
+
+.us-podium-spot.is-p3 .us-podium-block::after {
+  animation-delay: 1s;
+}
+
+.us-podium-block b {
+  font-family: var(--us-display);
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--medal);
+  text-shadow: 0 2px 14px color-mix(in srgb, var(--medal) 55%, transparent);
+}
+
+.us-podium-spot.is-p1 .us-podium-block b {
+  font-size: 44px;
+}
+
+/* Every row's points as a share of the leader's: the gap to the top, drawn. */
+.us-lb-row {
+  position: relative;
+  overflow: hidden;
+}
+
+.us-lb-row:hover {
+  border-color: var(--us-line-strong);
+}
+
+.us-lb-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: calc(var(--share, 0) * 100%);
+  height: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--team) 30%, transparent), var(--team));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--team) 60%, transparent);
+  transition: width 0.6s ease;
+}
+
+/* The open row, as a challenger's slot: the "?" calls, and the way in is a
+   button, not a link in the corner. */
+.us-lb-open-rank {
+  position: relative;
+  box-shadow: 0 18px 40px -16px var(--us-accent);
+}
+
+.us-lb-open-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: var(--us-accent);
+  color: #fff;
+  box-shadow: 0 8px 20px -10px var(--us-accent);
+  transition: background 0.16s ease;
+}
+
+.us-lb-open:hover .us-lb-open-go {
+  background: var(--us-accent-hover);
+}
+
+.us-lb-open-go-text {
+  display: none;
+}
+
+/* Already booked? A ticket: the stub's red edge, the ticket icon at a tilt,
+   and (from a laptop up) a perforation with notches between the ask and the
+   box. */
+.us-find-card {
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--us-accent) 13%, var(--us-surface)) 0%,
+    var(--us-surface) 42%
+  );
+  border-color: color-mix(in srgb, var(--us-accent) 28%, var(--us-line));
+}
+
+.us-find-icon {
+  background: linear-gradient(135deg, var(--us-accent), #b21d29);
+  color: #fff;
+  rotate: -8deg;
+  box-shadow: 0 10px 22px -10px var(--us-accent);
+}
+
+@media (min-width: 480px) {
+  .us-lb-open-go-text {
+    display: inline;
+  }
+}
+
+@media (min-width: 640px) {
+  .us-root .us-podium {
+    gap: 16px;
+    max-width: 820px;
+    margin: 26px auto 20px;
+  }
+
+  .us-podium-avatar {
+    width: 64px;
+    height: 64px;
+    font-size: 20px;
+  }
+
+  .us-podium-spot.is-p1 .us-podium-avatar {
+    width: 84px;
+    height: 84px;
+    font-size: 26px;
+  }
+
+  .us-podium-crown {
+    width: 42px;
+    height: 32px;
+  }
+
+  .us-root .us-podium-name {
+    font-size: 16px;
+  }
+
+  .us-root .us-podium-points {
+    font-size: 26px;
+  }
+
+  .us-podium-spot.is-p1 .us-podium-points {
+    font-size: 34px;
+  }
+
+  .us-root .us-podium-time {
+    font-size: 13px;
+  }
+
+  .us-podium-block {
+    height: 84px;
+    padding-top: 12px;
+  }
+
+  .us-podium-spot.is-p1 .us-podium-block {
+    height: 132px;
+  }
+
+  .us-podium-spot.is-p2 .us-podium-block {
+    height: 106px;
+  }
+
+  .us-podium-block b {
+    font-size: 44px;
+  }
+
+  .us-podium-spot.is-p1 .us-podium-block b {
+    font-size: 60px;
+  }
+}
+
+@media (min-width: 1024px) {
+  /* The perforation, with a notch bitten out of the card at each end. It
+     sits in the middle of the 40px gap before the box's 500px column. */
+  .us-find-card::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: calc(28px + 500px + 20px - 10px);
+    width: 20px;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 50% 0, var(--us-bg-2) 9px, transparent 9.5px),
+      radial-gradient(circle at 50% 100%, var(--us-bg-2) 9px, transparent 9.5px),
+      linear-gradient(var(--us-line-strong) 50%, transparent 0) center top / 2px 8px repeat-y;
+  }
+}
+
+@keyframes usCrownBob {
+  50% {
+    translate: 0 -3px;
+  }
+}
+
+@keyframes usSheen {
+  0%,
+  70% {
+    translate: -100% 0;
+  }
+  100% {
+    translate: 100% 0;
+  }
 }
 
 /* -------------------------------- 6. Login ------------------------------ */
@@ -1134,7 +3904,12 @@ body:has(.us-root) {
   flex-direction: column;
   gap: 28px;
   padding: 28px 24px;
-  background: linear-gradient(160deg, rgba(255, 77, 28, 0.12), transparent 55%), var(--us-bg-2);
+  /* The landing page's George Town, so signing in feels like the same race. */
+  background:
+    linear-gradient(160deg, rgba(6, 19, 41, 0.72), rgba(6, 19, 41, 0.94) 60%),
+    linear-gradient(160deg, rgba(232, 50, 63, 0.2), transparent 55%),
+    url("/blog-traveloop-intro.jpg") center / cover,
+    var(--us-bg-2);
   border-bottom: 1px solid var(--us-line);
 }
 
@@ -1150,7 +3925,7 @@ body:has(.us-root) {
   max-width: 44ch;
 }
 
-.us-login-roles {
+.us-root .us-login-roles {
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1222,6 +3997,10 @@ body:has(.us-root) {
 /* -------------------------- 7. Phone app shell -------------------------- */
 
 .us-app {
+  /* A fixed height, so the sticky rows under it (station filters, and the
+     desktop tab row) know exactly where it ends. */
+  --us-appbar-h: 64px;
+  --us-tabbar-h: 0px;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -1234,9 +4013,11 @@ body:has(.us-root) {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  background: rgba(10, 11, 15, 0.9);
+  height: var(--us-appbar-h);
+  padding: 0 16px;
+  background: rgba(6, 19, 41, 0.9);
   backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--us-line);
 }
 
@@ -1258,6 +4039,7 @@ body:has(.us-root) {
   font-family: var(--us-display);
   font-size: 16px;
   font-weight: 700;
+  line-height: 1.3;
   letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
@@ -1266,7 +4048,11 @@ body:has(.us-root) {
 
 .us-appbar-sub {
   font-size: 12px;
+  line-height: 1.4;
   color: var(--us-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .us-appbar-right {
@@ -1315,8 +4101,9 @@ body:has(.us-root) {
   display: flex;
   justify-content: space-around;
   padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
-  background: rgba(14, 16, 22, 0.94);
+  background: rgba(6, 19, 41, 0.94);
   backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid var(--us-line);
 }
 
@@ -1387,7 +4174,7 @@ body:has(.us-root) {
   background: var(--us-accent);
   border: 4px solid var(--us-bg);
   color: #fff;
-  box-shadow: 0 10px 26px -10px rgba(255, 77, 28, 0.95);
+  box-shadow: 0 10px 26px -10px rgba(232, 50, 63, 0.95);
   transition: transform 0.14s ease, background 0.16s ease;
 }
 
@@ -1406,8 +4193,8 @@ body:has(.us-root) {
 }
 
 .us-tab.is-prominent.is-active .us-tab-icon {
-  background: #ff6236;
-  box-shadow: 0 0 0 3px var(--us-accent-soft), 0 10px 26px -10px rgba(255, 77, 28, 0.95);
+  background: var(--us-accent-hover);
+  box-shadow: 0 0 0 3px var(--us-accent-soft), 0 10px 26px -10px rgba(232, 50, 63, 0.95);
 }
 
 .us-tab.is-prominent .us-tab-badge {
@@ -1626,6 +4413,44 @@ body:has(.us-root) {
 }
 
 /* Score header */
+
+/* The race clock (gamemaster dashboard, team page): Start, the countdown, the finish. */
+.us-raceclock {
+  display: grid;
+  gap: 10px;
+  padding: 22px;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--team) 26%, var(--us-surface)), var(--us-surface) 70%);
+  border: 1px solid color-mix(in srgb, var(--team) 34%, var(--us-line));
+  border-radius: var(--us-radius-lg);
+}
+
+.us-raceclock .us-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.us-raceclock-time {
+  font-family: var(--us-display);
+  font-size: clamp(48px, 15vw, 72px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.us-raceclock.is-ready .us-raceclock-time {
+  color: var(--us-muted);
+}
+
+.us-raceclock-note {
+  font-size: 14px;
+  color: var(--us-muted);
+}
+
+.us-racetimer {
+  font-variant-numeric: tabular-nums;
+}
 
 .us-score {
   position: relative;
@@ -1860,7 +4685,7 @@ body:has(.us-root) {
 
 .us-stations-tools {
   position: sticky;
-  top: 61px;
+  top: calc(var(--us-appbar-h, 0px) + var(--us-tabbar-h, 0px));
   z-index: 20;
   display: flex;
   flex-direction: column;
@@ -1984,7 +4809,7 @@ body:has(.us-root) {
   padding: 3px 8px;
   border-radius: 999px;
   background: var(--us-boost-soft);
-  color: #b9a8ff;
+  color: var(--us-boost-text);
   font-family: var(--us-display);
   font-size: 10px;
   font-weight: 700;
@@ -2088,6 +4913,37 @@ body:has(.us-root) {
   /* The embed ships a light basemap; this settles it into the dark UI without
      needing a styled (keyed) map. */
   filter: invert(0.9) hue-rotate(180deg) saturate(0.7) brightness(0.95);
+}
+
+/* The area map before it's asked for: a tap loads Google's embed. */
+.us-mapfacade {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0;
+  filter: none;
+  background:
+    linear-gradient(rgba(186, 205, 245, 0.06) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, rgba(186, 205, 245, 0.06) 1px, transparent 1px) 0 0 / 28px 28px,
+    var(--us-surface-2);
+  color: var(--us-muted);
+  font-family: var(--us-display);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.us-mapfacade svg {
+  width: 22px;
+  height: 22px;
+  color: var(--us-accent);
+}
+
+.us-mapfacade:hover {
+  color: var(--us-text);
 }
 
 .us-mapframe.is-sheet {
@@ -2207,7 +5063,7 @@ body:has(.us-root) {
 .us-shopstatus.is-done {
   background: rgba(33, 212, 127, 0.1);
   border-color: rgba(33, 212, 127, 0.28);
-  color: #7ff0bb;
+  color: var(--us-live-text);
 }
 
 /* ------------------- 9. Sheets, reveal, celebration --------------------- */
@@ -2226,6 +5082,7 @@ body:has(.us-root) {
   inset: 0;
   background: rgba(4, 5, 8, 0.72);
   backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   border: none;
   cursor: pointer;
   animation: usFade 0.2s ease;
@@ -2248,6 +5105,12 @@ body:has(.us-root) {
   border-bottom: none;
   border-radius: 22px 22px 0 0;
   animation: usSheetUp 0.28s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+/* Focus lands on the sheet itself when it opens (useSheet.ts); the sheet
+   is the thing that's focused, not a control that needs a ring. */
+.us-sheet:focus {
+  outline: none;
 }
 
 .us-sheet-grab {
@@ -2310,7 +5173,7 @@ body:has(.us-root) {
 }
 
 .us-breakdown-row.is-bonus {
-  color: #c0b0ff;
+  color: var(--us-boost-text);
 }
 
 .us-breakdown-row.is-bonus b {
@@ -2493,435 +5356,12 @@ body:has(.us-root) {
   margin-top: 16px;
 }
 
-/* --------------------------- 10. Admin console -------------------------- */
-
-.us-admin {
-  min-height: 100dvh;
-}
-
-.us-admin-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 44;
-  background: rgba(4, 5, 8, 0.6);
-  border: none;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.2s ease, visibility 0.2s ease;
-}
-
-.us-admin.rail-open .us-admin-scrim {
-  opacity: 1;
-  visibility: visible;
-}
-
-.us-admin-rail {
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 45;
-  width: 258px;
-  display: flex;
-  flex-direction: column;
-  padding: 20px 16px;
-  background: var(--us-bg-2);
-  border-right: 1px solid var(--us-line);
-  transform: translateX(-100%);
-  transition: transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1);
-  overflow-y: auto;
-}
-
-.us-admin.rail-open .us-admin-rail {
-  transform: none;
-}
-
-.us-admin-railhead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 26px;
-}
-
-.us-admin-badge {
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--us-accent-soft);
-  color: var(--us-accent);
-  font-family: var(--us-display);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.us-admin-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.us-admin-link {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  color: var(--us-muted);
-  font-family: var(--us-display);
-  font-size: 14px;
-  font-weight: 500;
-  transition: background 0.14s ease, color 0.14s ease;
-}
-
-.us-admin-link svg {
-  width: 18px;
-  height: 18px;
-}
-
-.us-admin-link:hover {
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--us-text);
-}
-
-.us-admin-link.is-active {
-  background: var(--us-accent-soft);
-  color: var(--us-accent);
-  font-weight: 600;
-}
-
-.us-admin-count {
-  margin-left: auto;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.us-admin-railfoot {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: auto;
-  padding-top: 22px;
-  border-top: 1px solid var(--us-line);
-}
-
-.us-admin-public {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--us-muted);
-}
-
-.us-admin-public svg {
-  width: 15px;
-  height: 15px;
-}
-
-.us-admin-operator {
-  font-size: 12px;
-  color: var(--us-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.us-admin-signout {
-  padding: 8px 14px;
-  background: transparent;
-  border: 1px solid var(--us-line-strong);
-  border-radius: 999px;
-  color: var(--us-muted);
-  font-family: var(--us-display);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.us-admin-signout:hover {
-  color: var(--us-text);
-}
-
-.us-admin-topbar {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: rgba(10, 11, 15, 0.9);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--us-line);
-}
-
-.us-admin-burger {
-  display: grid;
-  gap: 4px;
-  width: 40px;
-  height: 40px;
-  padding: 11px;
-  align-content: center;
-  background: transparent;
-  border: 1px solid var(--us-line-strong);
-  border-radius: 10px;
-  cursor: pointer;
-}
-
-.us-admin-burger span {
-  display: block;
-  height: 1.5px;
-  background: var(--us-text);
-  border-radius: 2px;
-}
-
-.us-admin-topname {
-  font-family: var(--us-display);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.us-admin-content {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 20px 16px 60px;
-  max-width: 1320px;
-}
-
-.us-adminhead {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 18px;
-  flex-wrap: wrap;
-}
-
-.us-adminhead h1 {
-  font-size: clamp(26px, 4vw, 34px);
-}
-
-.us-adminhead p {
-  margin-top: 6px;
-  max-width: 74ch;
-  font-size: 14px;
-  color: var(--us-muted);
-}
-
-.us-adminstats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
-}
-
-.us-adminstat {
-  padding: 16px 18px;
-  background: var(--us-surface);
-  border: 1px solid var(--us-line);
-  border-radius: var(--us-radius);
-}
-
-.us-adminstat-label {
-  font-family: var(--us-display);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--us-faint);
-}
-
-.us-adminstat-value {
-  margin-top: 6px;
-  font-family: var(--us-display);
-  font-size: 30px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
-}
-
-.us-adminstat-note {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--us-muted);
-}
-
-.us-admingrid {
-  display: grid;
-  gap: 16px;
-}
-
-.us-adminpanel {
-  background: var(--us-surface);
-  border: 1px solid var(--us-line);
-  border-radius: var(--us-radius-lg);
-  overflow: hidden;
-}
-
-.us-adminpanel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--us-line);
-}
-
-.us-adminpanel-head h2 {
-  font-size: 15px;
-}
-
-.us-adminpanel-head p {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--us-faint);
-}
-
-.us-adminpanel-count {
-  font-family: var(--us-display);
-  font-size: 12px;
-  color: var(--us-muted);
-}
-
-.us-adminpanel-body {
-  padding: 18px;
-}
+/* -------------------------------- 10. Forms ------------------------------ */
 
 .us-form-grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: 14px;
-}
-
-/* Tables */
-
-.us-tablewrap {
-  overflow-x: auto;
-}
-
-.us-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.us-table th {
-  padding: 11px 14px;
-  text-align: left;
-  font-family: var(--us-display);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--us-faint);
-  border-bottom: 1px solid var(--us-line);
-  white-space: nowrap;
-}
-
-.us-table td {
-  padding: 13px 14px;
-  border-bottom: 1px solid var(--us-line);
-  vertical-align: top;
-}
-
-.us-table tr:last-child td {
-  border-bottom: none;
-}
-
-.us-table tr.is-dim td {
-  opacity: 0.55;
-}
-
-.us-table tr.is-voidrow td {
-  opacity: 0.6;
-  background: rgba(255, 77, 106, 0.04);
-}
-
-.us-tablename {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--us-display);
-  font-weight: 600;
-  color: var(--us-text);
-}
-
-.us-tablesub {
-  display: block;
-  margin-top: 3px;
-  font-size: 12px;
-  color: var(--us-faint);
-}
-
-.us-table-actions {
-  text-align: right;
-  white-space: nowrap;
-}
-
-.us-swatch,
-.us-teamdot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
-.us-teamdot {
-  border-radius: 50%;
-  margin-right: 8px;
-}
-
-.us-rowedit summary {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 13px;
-  border: 1px solid var(--us-line-strong);
-  border-radius: 999px;
-  color: var(--us-muted);
-  font-family: var(--us-display);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  list-style: none;
-}
-
-.us-rowedit summary::-webkit-details-marker {
-  display: none;
-}
-
-.us-rowedit[open] summary {
-  border-color: var(--us-accent);
-  color: var(--us-accent);
-}
-
-.us-rowedit-body {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  width: min(360px, 80vw);
-  margin-top: 12px;
-  padding: 16px;
-  text-align: left;
-  white-space: normal;
-  background: var(--us-bg-2);
-  border: 1px solid var(--us-line);
-  border-radius: var(--us-radius);
-}
-
-.us-danger {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 14px;
-  border-top: 1px solid var(--us-line);
-}
-
-.us-danger small {
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--us-faint);
 }
 
 /* ------------------------ 11. Motion + responsive ----------------------- */
@@ -3015,22 +5455,6 @@ body:has(.us-root) {
 
 /* --- Tablet up --- */
 @media (min-width: 640px) {
-  .us-topbar {
-    padding: 16px 28px;
-  }
-
-  .us-topbar-nav {
-    display: flex;
-  }
-
-  .us-hero-stats {
-    grid-template-columns: repeat(4, 1fr);
-  }
-
-  .us-steps {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
   .us-lb-row {
     grid-template-columns: 46px 1fr auto auto;
     padding: 16px 20px;
@@ -3048,12 +5472,6 @@ body:has(.us-root) {
   .us-lb-points {
     min-width: 92px;
     justify-content: flex-end;
-  }
-
-  .us-footer-inner {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
   }
 
   .us-teamgrid {
@@ -3081,23 +5499,13 @@ body:has(.us-root) {
     grid-column: 1 / -1;
   }
 
-  .us-admin-content {
-    padding: 26px 28px 70px;
-  }
+  
 }
 
 /* --- Desktop --- */
 @media (min-width: 1024px) {
   .us-root {
     font-size: 15.5px;
-  }
-
-  .us-steps {
-    grid-template-columns: repeat(4, 1fr);
-  }
-
-  .us-mathcard {
-    max-width: 560px;
   }
 
   .us-login {
@@ -3122,17 +5530,35 @@ body:has(.us-root) {
     padding-bottom: 60px;
   }
 
+  .us-app {
+    --us-tabbar-h: 57px;
+  }
+
+  /* The bar comes last in the markup (it's fixed to the bottom on a phone),
+     so up here it's moved up under the top bar rather than left at the foot
+     of the page. */
+  .us-app > .us-tabbar {
+    order: 1;
+  }
+
+  .us-app > .us-page {
+    order: 2;
+  }
+
   .us-tabbar {
     position: sticky;
-    top: 61px;
+    top: var(--us-appbar-h);
     bottom: auto;
     justify-content: flex-start;
     gap: 6px;
+    width: 100%;
     max-width: 760px;
+    height: var(--us-tabbar-h);
     margin: 0 auto;
     padding: 8px 24px;
-    background: transparent;
+    background: var(--us-bg);
     backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     border-top: none;
     border-bottom: 1px solid var(--us-line);
   }
@@ -3174,7 +5600,7 @@ body:has(.us-root) {
   }
 
   .us-tab.is-prominent.is-active {
-    background: #ff6236;
+    background: var(--us-accent-hover);
     color: #fff;
   }
 
@@ -3203,34 +5629,787 @@ body:has(.us-root) {
     flex: 1;
   }
 
-  .us-admingrid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  
 
   /* The console's default pairing: a narrow "create" column beside the wide
      list it feeds. */
-  .us-admingrid.is-narrowfirst {
-    grid-template-columns: 330px 1fr;
-    align-items: start;
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+}
+
+/* ---------------------------- 12. Team booking ---------------------------- */
+
+/* Booking page */
+
+.us-book {
+  padding-top: clamp(32px, 5vw, 60px);
+  padding-bottom: 96px;
+}
+
+.us-book-head {
+  margin-bottom: 32px;
+}
+
+.us-book-head h1 {
+  margin-top: 14px;
+  font-size: clamp(32px, 5vw, 54px);
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+}
+
+.us-root .us-book-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--us-muted);
+}
+
+.us-book-facts li {
+  padding: 7px 14px;
+  background: var(--us-surface);
+  border: 1px solid var(--us-line);
+  border-radius: 999px;
+}
+
+.us-book-facts b {
+  color: var(--us-text);
+  font-family: var(--us-display);
+}
+
+.us-book-layout {
+  display: grid;
+  gap: 18px;
+  align-items: start;
+}
+
+.us-book-main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0; /* lets the date strip scroll instead of widening the column */
+}
+
+.us-book-section,
+.us-summary {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+  min-width: 0;
+  background: var(--us-surface);
+  border: 1px solid var(--us-line);
+  border-radius: var(--us-radius-lg);
+  box-shadow: 0 30px 60px -50px rgba(16, 26, 44, 0.45);
+}
+
+/* The summary carries the pay button, so it gets the brand stripe. */
+.us-summary {
+  overflow: hidden;
+}
+
+.us-summary::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 5px;
+  background: linear-gradient(90deg, var(--tl-red), var(--tl-blue));
+}
+
+.us-book-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.us-book-step h2 {
+  font-size: 18px;
+}
+
+.us-root .us-book-step p {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--us-muted);
+}
+
+.us-book-stepnum {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--us-accent-soft);
+  color: var(--us-accent);
+  font-family: var(--us-display);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Date strip: sideways scroll on a phone, which is where this gets used. */
+
+.us-datestrip {
+  display: flex;
+  gap: 8px;
+  margin: 0 -20px;
+  padding: 2px 20px 8px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+
+.us-datechip {
+  flex: 0 0 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 0;
+  background: var(--us-surface-2);
+  border: 1px solid var(--us-line);
+  border-radius: 14px;
+  color: var(--us-text);
+  font-family: var(--us-display);
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.us-datechip:hover:not(:disabled) {
+  border-color: var(--us-line-strong);
+}
+
+.us-datechip-dow,
+.us-datechip-month {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--us-muted);
+}
+
+.us-datechip-day {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.us-datechip.is-active {
+  background: var(--us-accent);
+  border-color: var(--us-accent);
+  color: #fff;
+}
+
+.us-datechip.is-active .us-datechip-dow,
+.us-datechip.is-active .us-datechip-month {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.us-datechip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Time slots */
+
+.us-slotgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 8px;
+}
+
+.us-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 14px;
+  background: var(--us-surface-2);
+  border: 1px solid var(--us-line);
+  border-radius: 14px;
+  color: var(--us-text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.us-slot b {
+  font-family: var(--us-display);
+  font-size: 16px;
+}
+
+.us-slot span {
+  font-size: 12px;
+  color: var(--us-live);
+}
+
+.us-slot.is-low span {
+  color: var(--us-warn);
+}
+
+.us-slot:hover:not(:disabled) {
+  border-color: var(--us-line-strong);
+}
+
+.us-slot.is-active {
+  background: var(--us-accent-soft);
+  border-color: var(--us-accent);
+}
+
+.us-slot:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.us-slot:disabled span {
+  color: var(--us-muted);
+}
+
+.us-slot:disabled b {
+  text-decoration: line-through;
+  text-decoration-color: var(--us-faint);
+}
+
+/* Participants */
+
+.us-people {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.us-person {
+  margin: 0;
+  padding: 16px;
+  min-width: 0;
+  background: var(--us-bg-2);
+  border: 1px solid var(--us-line);
+  border-radius: var(--us-radius);
+}
+
+.us-person-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  margin-bottom: 14px;
+  font-family: var(--us-display);
+  font-weight: 600;
+}
+
+.us-person-num {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--us-surface-3);
+  color: var(--us-muted);
+  font-size: 12px;
+}
+
+/* Errors: shown against the field, in words, not only in colour. */
+
+.us-field-error {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--us-danger-text);
+}
+
+.us-field.has-error input,
+.us-field.has-error select,
+.us-field.has-error .us-segment {
+  border-color: var(--us-danger);
+}
+
+/* Summary + consent */
+
+.us-summary h2 {
+  font-size: 18px;
+}
+
+.us-summary-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.us-summary-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--us-line);
+  font-size: 14px;
+}
+
+.us-summary-list dt {
+  color: var(--us-muted);
+}
+
+.us-summary-list dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.us-summary-list > div.is-total {
+  border-bottom: none;
+  padding-top: 14px;
+  font-family: var(--us-display);
+  font-size: 18px;
+}
+
+.us-summary-list > div.is-total dt {
+  color: var(--us-text);
+}
+
+.us-terms {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  background: var(--us-bg-2);
+  border: 1px solid var(--us-line);
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.us-terms input {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  accent-color: var(--us-accent);
+  cursor: pointer;
+}
+
+.us-root .us-terms a {
+  color: var(--us-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.us-terms.has-error {
+  border-color: var(--us-danger);
+}
+
+/* Success page */
+
+.us-book-done {
+  max-width: 620px;
+}
+
+.us-done {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.us-done h1 {
+  font-size: clamp(26px, 5vw, 38px);
+  line-height: 1.1;
+}
+
+.us-done-mark {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(33, 212, 127, 0.14);
+  color: var(--us-live);
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.us-done-mark.is-waiting {
+  background: rgba(255, 176, 32, 0.14);
+  color: var(--us-warn);
+}
+
+.us-done-lede {
+  color: var(--us-muted);
+}
+
+.us-done-details {
+  margin: 8px 0 12px;
+  padding: 4px 18px;
+  background: var(--us-surface);
+  border: 1px solid var(--us-line);
+  border-radius: var(--us-radius-lg);
+}
+
+.us-root .us-empty-note a {
+  color: var(--us-text);
+  text-decoration: underline;
+}
+
+@media (min-width: 640px) {
+  .us-book-section,
+  .us-summary {
+    padding: 24px;
   }
 
-  .us-admin-rail {
-    transform: none;
+  .us-datestrip {
+    margin: 0 -24px;
+    padding: 2px 24px 8px;
   }
 
-  .us-admin-main {
-    margin-left: 258px;
+  .us-person {
+    padding: 18px 20px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .us-book-layout {
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 24px;
   }
 
-  .us-admin-topbar {
+  /* The pay button follows the buyer down a long form. */
+  .us-summary {
+    position: sticky;
+    top: 84px;
+  }
+}
+
+/* ---------------------- 13. Results, wording, console ---------------------- */
+
+.us-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Booking page: the Rules & Regulations, folded above the declaration. Both
+   are staff-edited plain text, so line breaks are the only layout they get. */
+
+.us-rules {
+  border: 1px solid var(--us-line);
+  border-radius: 12px;
+  background: var(--us-surface);
+}
+
+.us-rules summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 14px;
+  font-family: var(--us-display);
+  font-size: 14px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.us-rules summary::-webkit-details-marker {
+  display: none;
+}
+
+.us-rules summary::after {
+  content: "+";
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--us-accent);
+  transition: transform 0.2s ease;
+}
+
+.us-rules[open] summary::after {
+  transform: rotate(45deg);
+}
+
+.us-rules-body {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 0 14px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-line;
+  color: var(--us-muted);
+}
+
+.us-terms > span {
+  white-space: pre-line;
+}
+
+.us-root .us-rules-body a {
+  color: var(--us-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.us-root .us-done-arrive {
+  padding: 14px 16px;
+  background: var(--us-bg-2);
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+/* Results board */
+
+.us-boardviews {
+  display: inline-flex;
+  margin-bottom: 16px;
+}
+
+.us-boardviews .us-segment-btn {
+  flex: 0 0 auto;
+  padding: 0 16px;
+}
+
+.us-lb.is-results .us-lb-row {
+  grid-template-columns: 42px 1fr auto;
+}
+
+.us-lb-score {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.us-lb-time {
+  font-family: var(--us-display);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--us-muted);
+}
+
+.us-sechead-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Booking page: each racer's Platinum Pass registration, under their race
+   details, and the pass's insurance contract folded beside the rules. The
+   contract is rendered by the site's InsuranceTerms (globals.css styles it),
+   so here it only needs its whitespace back and the campaign's colours. */
+
+.us-root .us-person-section {
+  margin: 6px 0 -4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--us-line);
+  font-family: var(--us-display);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--us-faint);
+}
+
+.us-rules-body.is-doc {
+  white-space: normal;
+}
+
+.us-rules-body.is-doc .terms-doc {
+  font-size: 12.5px;
+  color: var(--us-muted);
+}
+
+.us-rules-body.is-doc .terms-doc h3,
+.us-rules-body.is-doc .terms-doc h4 {
+  color: var(--us-text);
+}
+
+.us-rules-body.is-doc .terms-table {
+  width: 100%;
+  font-size: 12px;
+}
+
+/* Success page: every racer's pass number, to collect at the airport. */
+
+/* A team's private page link on the success page (ShareTeamLink.tsx). */
+.us-teamlink {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 26px;
+}
+
+.us-teamlink-url {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--us-line);
+  border-radius: var(--us-radius);
+  background: var(--us-surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: inherit;
+}
+
+.us-teamlink-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.us-done-passes {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--us-line);
+  border-radius: 12px;
+}
+
+.us-done-passes li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+
+.us-done-passes li + li {
+  border-top: 1px solid var(--us-line);
+}
+
+.us-done-passes .us-mono {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* ------------------- 14. Loading, pending, pay bar ---------------------- */
+
+/* Skeleton screens (AppSkeleton.tsx). A slow opacity pulse rather than a
+   moving shimmer: opacity is composited, so the placeholder costs no
+   repaints while the real screen is on its way. */
+.us-skel {
+  display: block;
+  border-radius: 8px;
+  background: var(--us-tint);
+  animation: usSkel 1.2s ease-in-out infinite alternate;
+}
+
+.us-skel-title {
+  width: 140px;
+  height: 16px;
+}
+
+.us-skel-sub {
+  width: 96px;
+  height: 11px;
+  margin-top: 7px;
+}
+
+.us-skel-hero {
+  height: 150px;
+  border-radius: var(--us-radius-lg);
+}
+
+.us-skel-card {
+  height: 96px;
+  border-radius: var(--us-radius-lg);
+}
+
+.us-skel-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
+.us-skel-label {
+  width: 40px;
+  height: 8px;
+}
+
+@keyframes usSkel {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* A claim-a-team card while its claim is in flight (SubmitButton.tsx sets
+   aria-busy): its "Claim" swaps for "Claiming…". */
+.us-busy-label {
+  display: none;
+}
+
+[aria-busy="true"] .us-idle-label {
+  display: none;
+}
+
+[aria-busy="true"] .us-busy-label {
+  display: inline;
+}
+
+.us-teamcard[aria-busy="true"] {
+  cursor: progress;
+  border-color: var(--team);
+}
+
+/* The booking form's pay bar: on a phone, the total and a way to the pay
+   button stay in reach while the buyer works down six racers' details. It
+   steps aside once the summary itself is on screen, and from a laptop up,
+   where the summary is sticky beside the form, it isn't needed at all. */
+.us-paybar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  background: var(--us-surface);
+  border-top: 1px solid var(--us-line-strong);
+  box-shadow: 0 -12px 30px -18px rgba(16, 26, 44, 0.45);
+  transition: translate 0.25s ease, visibility 0.25s;
+}
+
+.us-paybar.is-hidden {
+  translate: 0 110%;
+  visibility: hidden;
+}
+
+.us-paybar-total {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--us-muted);
+}
+
+.us-paybar-total b {
+  font-family: var(--us-display);
+  font-size: 18px;
+  color: var(--us-text);
+}
+
+@media (min-width: 1024px) {
+  .us-paybar {
     display: none;
-  }
-
-  .us-admin-scrim {
-    display: none;
-  }
-
-  .us-admin-content {
-    padding: 34px 36px 80px;
   }
 }

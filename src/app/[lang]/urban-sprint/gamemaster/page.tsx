@@ -1,12 +1,23 @@
 import Link from "next/link";
 import { Icon } from "@/app/components/Icons";
 import { requireRole } from "@/lib/urban-sprint/auth";
+import { formatBookingDate, formatSlotTime, malaysiaToday } from "@/lib/urban-sprint/booking-config";
 import { getSettings } from "@/lib/urban-sprint/settings-db";
-import { getTeamForGamemaster, listTeams } from "@/lib/urban-sprint/teams-db";
+import {
+  getBookingByReference,
+  getBookingSummaries,
+  type BookingSummary,
+} from "@/lib/urban-sprint/bookings-db";
+import {
+  bookingReferenceForTeam,
+  getTeamForGamemaster,
+  listTeams,
+} from "@/lib/urban-sprint/teams-db";
 import { listCompletionsForTeam } from "@/lib/urban-sprint/completions-db";
-import { getStanding } from "@/lib/urban-sprint/leaderboard-db";
+import { RACE_MINUTES, racePhase, raceSeconds } from "@/lib/urban-sprint/race-clock";
+import { getStanding } from "@/lib/urban-sprint/results-db";
 import { listStationsForTeam } from "@/lib/urban-sprint/stations-db";
-import { initials, ordinal, percent, points, timeAgo } from "@/lib/urban-sprint/format";
+import { formatDuration, initials, ordinal, percent, points, timeAgo } from "@/lib/urban-sprint/format";
 import type { Team } from "@/lib/urban-sprint/types";
 import AppBar from "../_components/AppBar";
 import LiveRefresh from "../_components/LiveRefresh";
@@ -14,7 +25,10 @@ import TabBar from "../_components/TabBar";
 import { Empty, Flash, LivePill } from "../_components/ui";
 import { gamemasterTabs } from "../_components/tabs";
 import BoosterReveal from "./BoosterReveal";
-import { claimTeamAction, drawBoosterAction } from "./actions";
+import RaceTimer from "../_components/RaceTimer";
+import SubmitButton from "../_components/SubmitButton";
+import FinishRaceButton from "./FinishRaceButton";
+import { claimTeamAction, drawBoosterAction, finishRaceAction, startRaceAction } from "./actions";
 
 /**
  * The gamemaster's home, and the whole opening sequence.
@@ -31,6 +45,8 @@ const ERRORS: Record<string, string> = {
   missing: "That team couldn't be claimed. Try again.",
   noteam: "Claim a team first.",
   noboosters: "No boosters are active yet — ask an organiser to add one.",
+  nobooster: "Draw your booster before starting the race.",
+  notstarted: "The race hasn't started yet.",
 };
 
 export default async function GamemasterPage({
@@ -49,7 +65,14 @@ export default async function GamemasterPage({
   const error = typeof params.error === "string" ? ERRORS[params.error] : undefined;
 
   if (!team) {
-    return <ChooseTeam name={session.displayName} error={error} revision={settings.revision} />;
+    return (
+      <ChooseTeam
+        name={session.displayName}
+        error={error}
+        revision={settings.revision}
+        todayOnly={params.show === "today"}
+      />
+    );
   }
 
   if (!team.booster) {
@@ -74,12 +97,41 @@ async function ChooseTeam({
   name,
   error,
   revision,
+  todayOnly,
 }: {
   name: string;
   error?: string;
   revision: number;
+  todayOnly: boolean;
 }) {
-  const teams = await listTeams({ activeOnly: true });
+  const today = malaysiaToday();
+  const allTeams = await listTeams({ activeOnly: true });
+  const bookings = await getBookingSummaries(
+    allTeams.map(bookingReferenceForTeam).filter((ref): ref is string => ref !== null)
+  );
+  const bookingOf = (team: Team) => {
+    const reference = bookingReferenceForTeam(team);
+    return reference ? (bookings.get(reference) ?? null) : null;
+  };
+
+  // A finished race can't be run again, and an unpaid booking isn't a team.
+  // Soonest race first; teams added by hand, which have no race day, last.
+  const teams = allTeams
+    .filter((team) => racePhase(team) !== "finished")
+    .filter((team) => {
+      const booking = bookingOf(team);
+      if (bookingReferenceForTeam(team) && booking?.status !== "paid") return false;
+      return !todayOnly || booking?.date === today;
+    })
+    .sort((a, b) => {
+      const slotA = bookingOf(a);
+      const slotB = bookingOf(b);
+      return (
+        (slotA ? `${slotA.date} ${slotA.time}` : "9999").localeCompare(
+          slotB ? `${slotB.date} ${slotB.time}` : "9999"
+        ) || a.name.localeCompare(b.name)
+      );
+    });
   const available = teams.filter((team) => !team.gamemasterId);
   const running = teams.filter((team) => team.gamemasterId);
 
@@ -89,7 +141,7 @@ async function ChooseTeam({
           from the list, not fail on tap — so this screen is live too. */}
       <LiveRefresh revision={revision} intervalMs={4000} />
 
-      <AppBar title={`Hi, ${name}`} subtitle="Choose the team you're running today" />
+      <AppBar title={`Hi, ${name}`} subtitle="Choose the team you're running" />
 
       <div className="us-page">
         {error && <Flash tone="err">{error}</Flash>}
@@ -104,46 +156,59 @@ async function ChooseTeam({
           </p>
         </div>
 
+        <nav className="us-segment us-choose-views" aria-label="Which teams">
+          <Link
+            className={`us-segment-btn${todayOnly ? "" : " is-active"}`}
+            href="/urban-sprint/gamemaster"
+            aria-current={todayOnly ? undefined : "page"}
+            scroll={false}
+          >
+            All teams
+          </Link>
+          <Link
+            className={`us-segment-btn${todayOnly ? " is-active" : ""}`}
+            href="/urban-sprint/gamemaster?show=today"
+            aria-current={todayOnly ? "page" : undefined}
+            scroll={false}
+          >
+            Racing today
+          </Link>
+        </nav>
+
         {available.length === 0 ? (
-          <Empty title="Every team is taken">
-            All active teams already have a gamemaster. Ask an organiser to add a team or release
-            one.
-          </Empty>
+          teams.length === 0 ? (
+            <Empty title={todayOnly ? "No teams racing today" : "No teams to run"}>
+              {todayOnly
+                ? "Nobody is booked to race today. Check All teams, or ask an organiser."
+                : "Teams appear here as soon as they book. Ask an organiser if you expected one."}
+            </Empty>
+          ) : (
+            <Empty title="Every team is taken">
+              {todayOnly ? "All of today's teams" : "Every team"} already has a gamemaster. Ask an
+              organiser to release one.
+            </Empty>
+          )
         ) : (
           <ul className="us-teamgrid">
             {available.map((team) => (
               <li key={team.id}>
                 <form action={claimTeamAction}>
                   <input type="hidden" name="teamId" value={team.id} />
-                  <button
+                  <SubmitButton
                     className="us-teamcard"
-                    type="submit"
                     style={{ "--team": team.color } as React.CSSProperties}
                   >
                     <span className="us-teamcard-bar" aria-hidden />
                     <span className="us-teamcard-body">
                       <span className="us-teamcard-name">{team.name}</span>
-                      <span className="us-teamcard-meta">
-                        {team.members.length === 0
-                          ? "No participants yet"
-                          : `${team.members.length} participant${team.members.length === 1 ? "" : "s"}`}
-                      </span>
-                      {team.members.length > 0 && (
-                        <span className="us-avatars">
-                          {team.members.slice(0, 5).map((member) => (
-                            <i key={member.userId} title={member.displayName}>
-                              {initials(member.displayName)}
-                            </i>
-                          ))}
-                          {team.members.length > 5 && <i>+{team.members.length - 5}</i>}
-                        </span>
-                      )}
+                      <span className="us-teamcard-meta">{teamCardMeta(bookingOf(team), today)}</span>
                     </span>
                     <span className="us-teamcard-go">
-                      Claim
+                      <span className="us-idle-label">Claim</span>
+                      <span className="us-busy-label">Claiming…</span>
                       <Icon name="check" />
                     </span>
-                  </button>
+                  </SubmitButton>
                 </form>
               </li>
             ))}
@@ -152,7 +217,7 @@ async function ChooseTeam({
 
         {running.length > 0 && (
           <section className="us-taken">
-            <p className="us-eyebrow">Already on course</p>
+            <p className="us-eyebrow">Already claimed</p>
             <ul>
               {running.map((team) => (
                 <li key={team.id} style={{ "--team": team.color } as React.CSSProperties}>
@@ -168,6 +233,13 @@ async function ChooseTeam({
       </div>
     </>
   );
+}
+
+/** When a booked team races, and how many; a team added by hand has neither. */
+function teamCardMeta(booking: BookingSummary | null, today: string): string {
+  if (!booking) return "Added by the organisers";
+  const day = booking.date === today ? "Today" : formatBookingDate(booking.date);
+  return `${day} · ${formatSlotTime(booking.time)} · ${booking.teamSize} racers`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -207,9 +279,9 @@ function DrawBoosterScreen({
         </div>
 
         <form action={drawBoosterAction} className="us-draw-form">
-          <button className="us-btn us-btn-primary us-btn-block us-btn-xl" type="submit">
+          <SubmitButton className="us-btn us-btn-primary us-btn-block us-btn-xl" pendingLabel="Drawing…">
             Draw {team.name}&rsquo;s booster
-          </button>
+          </SubmitButton>
           <p className="us-draw-fineprint">Drawn on the server. No takebacks.</p>
         </form>
       </div>
@@ -232,15 +304,21 @@ async function Dashboard({
   justDrawn: boolean;
   error?: string;
 }) {
-  const [standing, recent, stations] = await Promise.all([
-    getStanding(team.id),
+  const reference = bookingReferenceForTeam(team);
+  const [standing, recent, stations, booking] = await Promise.all([
+    reference ? getStanding(reference) : Promise.resolve({ row: null, total: 0 }),
     listCompletionsForTeam(team.id, 5),
     listStationsForTeam(team.id, team.booster),
+    reference ? getBookingByReference(reference) : Promise.resolve(null),
   ]);
+  // The gamemaster checks the team in, so they see who's on it.
+  const racers = booking?.participants.map((person) => person.fullName) ?? [];
 
   const remaining = stations.filter((station) => !station.completed);
   const boosted = remaining.filter((station) => station.projected.boosterApplied);
   const booster = team.booster!;
+  const phase = racePhase(team);
+  const place = standing.row ? ordinal(standing.row.rank) : null;
 
   return (
     <>
@@ -249,16 +327,57 @@ async function Dashboard({
 
       <AppBar
         title={team.name}
-        subtitle={standing.rank ? `${ordinal(standing.rank)} of ${standing.teams}` : "Unranked"}
+        subtitle={place ? `${place} of ${standing.total}` : "Not on the board yet"}
         accent={team.color}
       />
 
       <div className="us-page has-tabs">
         {error && <Flash tone="err">{error}</Flash>}
 
+        {phase === "ready" && (
+          <section className="us-raceclock is-ready" style={{ "--team": team.color } as React.CSSProperties}>
+            <p className="us-eyebrow">Ready to race</p>
+            <p className="us-raceclock-time">{formatDuration(RACE_MINUTES * 60)}</p>
+            <p className="us-raceclock-note">
+              The clock starts when you tap Start. Stations only count while it&rsquo;s running, and
+              the race ends at {RACE_MINUTES} minutes.
+            </p>
+            <form action={startRaceAction}>
+              <SubmitButton className="us-btn us-btn-primary us-btn-block us-btn-xl" pendingLabel="Starting…">
+                Start race
+              </SubmitButton>
+            </form>
+          </section>
+        )}
+
+        {phase === "racing" && team.raceStartedAt && (
+          <section className="us-raceclock is-racing" style={{ "--team": team.color } as React.CSSProperties}>
+            <p className="us-eyebrow">
+              Time left <LivePill label="Racing" />
+            </p>
+            <p className="us-raceclock-time">
+              <RaceTimer startedAt={team.raceStartedAt} mode="remaining" />
+            </p>
+            <form action={finishRaceAction}>
+              <FinishRaceButton />
+            </form>
+          </section>
+        )}
+
+        {phase === "finished" && (
+          <section className="us-raceclock is-finished" style={{ "--team": team.color } as React.CSSProperties}>
+            <p className="us-eyebrow">Race finished</p>
+            <p className="us-raceclock-time">{formatDuration(raceSeconds(team) ?? 0)}</p>
+            <p className="us-raceclock-note">
+              {points(team.points)} points{place ? ` · ${place} of ${standing.total} on the board` : ""}.
+              Well run.
+            </p>
+          </section>
+        )}
+
         <section className="us-score" style={{ "--team": team.color } as React.CSSProperties}>
           <p className="us-score-label">
-            Team score <LivePill />
+            Team score {phase === "racing" && <LivePill />}
           </p>
           <p className="us-score-value">{points(team.points)}</p>
           <div className="us-score-meta">
@@ -269,7 +388,7 @@ async function Dashboard({
               <b>{remaining.length}</b> left
             </span>
             <span>
-              <b>{standing.rank ? ordinal(standing.rank) : "—"}</b> place
+              <b>{place ?? "—"}</b> place
             </span>
           </div>
         </section>
@@ -291,24 +410,27 @@ async function Dashboard({
           </p>
         </section>
 
-        <Link className="us-btn us-btn-primary us-btn-block us-btn-xl" href="/urban-sprint/gamemaster/stations">
-          Browse stations
+        <Link
+          className={`us-btn us-btn-block ${phase === "racing" ? "us-btn-primary us-btn-xl" : "us-btn-ghost"}`}
+          href="/urban-sprint/gamemaster/stations"
+        >
+          {phase === "racing" ? "Browse stations" : phase === "ready" ? "Preview stations" : "View stations"}
           <Icon name="pin" />
         </Link>
 
         <section className="us-panel">
           <header className="us-panel-head">
             <h2>Squad</h2>
-            <span>{team.members.length}</span>
+            <span>{booking ? booking.reference : racers.length}</span>
           </header>
-          {team.members.length === 0 ? (
-            <p className="us-panel-empty">No participants assigned to this team yet.</p>
+          {racers.length === 0 ? (
+            <p className="us-panel-empty">This team wasn&rsquo;t booked online, so there&rsquo;s no racer list.</p>
           ) : (
             <ul className="us-roster">
-              {team.members.map((member) => (
-                <li key={member.userId}>
-                  <i>{initials(member.displayName)}</i>
-                  {member.displayName}
+              {racers.map((name, index) => (
+                <li key={index}>
+                  <i>{initials(name)}</i>
+                  {name}
                 </li>
               ))}
             </ul>
@@ -322,7 +444,11 @@ async function Dashboard({
           </header>
 
           {recent.length === 0 ? (
-            <p className="us-panel-empty">Nothing confirmed yet. Your first station starts the clock.</p>
+            <p className="us-panel-empty">
+              {phase === "ready"
+                ? "Nothing yet. Start the race, then confirm each station as your team clears it."
+                : "Nothing confirmed yet. Stations you confirm show up here."}
+            </p>
           ) : (
             <ul className="us-feed">
               {recent.map((row) => (

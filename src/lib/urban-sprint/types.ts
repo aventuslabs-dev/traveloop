@@ -6,7 +6,8 @@
  * so a driver change can't silently turn points into string concatenation.
  */
 
-export const URBAN_SPRINT_ROLES = ["admin", "gamemaster", "participant"] as const;
+/** Who signs in. Racers don't: they follow their team from its private link (team-link.ts). */
+export const URBAN_SPRINT_ROLES = ["admin", "gamemaster"] as const;
 export type UrbanSprintRole = (typeof URBAN_SPRINT_ROLES)[number];
 
 export const EVENT_STATUSES = ["upcoming", "live", "paused", "ended"] as const;
@@ -20,6 +21,14 @@ export type Settings = {
   eventLocation: string;
   defaultBasePoints: number;
   revision: number;
+  /** Shown before payment and in every confirmation email. Plain text; [label](/path) links allowed. */
+  rulesText: string;
+  /** The "I have read and understand" declaration. Plain text; [label](/path) links allowed. */
+  consentText: string;
+  /** Changes whenever consentText does, and is recorded on each booking. */
+  consentVersion: string;
+  /** Most teams the public results board may show; 0 means all of them. */
+  leaderboardLimit: number;
 };
 
 export type Category = {
@@ -72,12 +81,6 @@ export type ScoreBreakdown = {
   totalPoints: number;
 };
 
-export type TeamMember = {
-  userId: string;
-  displayName: string;
-  email: string;
-};
-
 export type Team = {
   id: number;
   name: string;
@@ -91,21 +94,9 @@ export type Team = {
   points: number;
   stationsCompleted: number;
   active: boolean;
-  members: TeamMember[];
-};
-
-export type LeaderboardRow = {
-  id: number;
-  name: string;
-  slug: string;
-  color: string;
-  points: number;
-  stationsCompleted: number;
-  boosterName: string | null;
-  boosterCategory: string | null;
-  boosterCategoryColor: string | null;
-  bonusPercent: number | null;
-  rank: number;
+  /** The race clock (race-clock.ts): started by the gamemaster, stopped by Finish or at 180 minutes. */
+  raceStartedAt: string | null;
+  raceFinishedAt: string | null;
 };
 
 export type CompletionStatus = "valid" | "void";
@@ -139,7 +130,9 @@ export type UrbanSprintUser = {
   phone: string | null;
   active: boolean;
   createdAt: string;
-  /** The team they play for (participant) or run (gamemaster), if any. */
+  /** The team they're running, for a gamemaster who has claimed one. */
   teamId: number | null;
   teamName: string | null;
+  /** The Traveloop operator's login — shown, but not editable here. */
+  isOperator: boolean;
 };

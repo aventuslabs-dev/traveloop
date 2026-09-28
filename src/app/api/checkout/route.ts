@@ -5,6 +5,7 @@ import { getSiteUrl, getStripe, isPaymentsBypassEnabled, siteIsPubliclyReachable
 import { PASS_CURRENCY, getPassTier } from "@/app/data/passes";
 import {
   NO_DISCOUNT,
+  PASS_PRODUCT,
   discountToMetadata,
   fulfillPassOrder,
   type OrderDiscount,
@@ -143,6 +144,7 @@ export async function POST(request: Request) {
     // needs one from the environment to exercise account creation locally.
     const order: PassOrder = {
       sessionId: `cs_bypass_${randomUUID()}`,
+      product: PASS_PRODUCT,
       draftId: null,
       items,
       amountTotal: quote.totalCents,

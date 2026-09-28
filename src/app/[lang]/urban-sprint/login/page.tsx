@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 const ERRORS: Record<string, string> = {
   "1": "That email and password don't match an Urban Sprint account.",
   noaccess:
-    "That account isn't registered for Urban Sprint. Ask an organiser to add you, or use the Traveloop customer portal instead.",
+    "That account isn't an Urban Sprint gamemaster or organiser. Racers don't sign in — open your team page from your booking confirmation.",
 };
 
 export default async function UrbanSprintLoginPage({
@@ -51,10 +51,6 @@ export default async function UrbanSprintLoginPage({
               <span>Claim your team, draw a booster, confirm stations on the move.</span>
             </li>
             <li>
-              <b>Participants</b>
-              <span>Follow your team&rsquo;s score, booster and rank as it happens.</span>
-            </li>
-            <li>
               <b>Organisers</b>
               <span>Run teams, stations, boosters and the score history.</span>
             </li>
@@ -62,7 +58,7 @@ export default async function UrbanSprintLoginPage({
         </div>
 
         <p className="us-login-brandfoot">
-          <Link href="/urban-sprint/leaderboard">View the public leaderboard →</Link>
+          <Link href="/urban-sprint#leaderboard">View the public leaderboard →</Link>
         </p>
       </section>
 
@@ -70,7 +66,7 @@ export default async function UrbanSprintLoginPage({
         <form className="us-login-card" action={login}>
           <p className="us-eyebrow">Urban Sprint</p>
           <h2>Sign in</h2>
-          <p className="us-login-sub">Use the credentials your organiser gave you.</p>
+          <p className="us-login-sub">For gamemasters and organisers.</p>
 
           {error && (
             <p className="us-flash us-flash-err" role="alert">
@@ -82,9 +78,11 @@ export default async function UrbanSprintLoginPage({
 
           <label className="us-field">
             <span>Email</span>
+            {/* Plain text rather than type="email": the Traveloop operator
+                signs in with the ID "admin". */}
             <input
               name="email"
-              type="email"
+              type="text"
               inputMode="email"
               autoComplete="username"
               autoCapitalize="none"
@@ -103,8 +101,9 @@ export default async function UrbanSprintLoginPage({
           </button>
 
           <p className="us-login-foot">
-            Urban Sprint accounts are separate from Traveloop customer accounts. Shopping for a
-            pass? <Link href="/account/login">Customer portal</Link>.
+            Racing? You don&rsquo;t need to sign in — open your team page from the link in your
+            booking confirmation. Shopping for a pass?{" "}
+            <Link href="/account/login">Customer portal</Link>.
           </p>
         </form>
       </section>

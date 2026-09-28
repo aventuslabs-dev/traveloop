@@ -14,6 +14,7 @@ export const metadata: Metadata = {
 const columns: Column[] = [
   { key: "invoice", label: "Invoice" },
   { key: "date", label: "Date" },
+  { key: "product", label: "Product" },
   { key: "customer", label: "Customer" },
   { key: "pass", label: "Pass" },
   { key: "qty", label: "Qty", align: "right" },
@@ -34,6 +35,7 @@ export default async function AdminOrdersPage() {
 
   const revenue = orders.reduce((sum, order) => sum + order.amountTotal, 0);
   const passes = orders.reduce((sum, order) => sum + order.quantity, 0);
+  const teams = orders.filter((order) => order.product.kind === "urban_sprint");
   const currency = orders[0]?.currency ?? "myr";
 
   // "This month" is the number an operator actually watches week to week.
@@ -47,12 +49,19 @@ export default async function AdminOrdersPage() {
     cells: {
       invoice: { kind: "text", value: order.invoiceNumber || "—", strong: true },
       date: { kind: "text", value: formatDay(order.createdAt) },
+      // An Urban Sprint entry is an order too: the team price, with a
+      // Platinum Pass for each racer. Its Booking ID links the two consoles.
+      product:
+        order.product.kind === "urban_sprint"
+          ? { kind: "stack", primary: "Urban Sprint", secondary: order.product.reference }
+          : { kind: "text", value: "Premier Pass" },
       customer: {
         kind: "stack",
         primary: order.customerName ?? "—",
         secondary: order.customerEmail ?? undefined,
       },
-      pass: { kind: "tier", label: order.passName },
+      // Every racer's pass is Platinum; "4 passes" would hide that.
+      pass: { kind: "tier", label: order.product.kind === "urban_sprint" ? "Platinum" : order.passName },
       qty: { kind: "num", value: order.quantity, display: String(order.quantity) },
       total: {
         kind: "num",
@@ -91,13 +100,21 @@ export default async function AdminOrdersPage() {
     <>
       <PageHeader
         title="Orders"
-        subtitle="Every pass purchased through checkout, newest first."
+        subtitle="Every Premier Pass purchase and Urban Sprint team entry, newest first. Each Urban Sprint racer gets a Platinum Pass."
       />
 
       <StatGrid
         stats={[
           { label: "Total orders", value: orders.length },
-          { label: "Passes sold", value: passes },
+          { label: "Passes issued", value: passes },
+          {
+            label: "Urban Sprint teams",
+            value: teams.length,
+            note: money(
+              teams.reduce((sum, order) => sum + order.amountTotal, 0),
+              currency
+            ),
+          },
           { label: "Revenue", value: money(revenue, currency) },
           {
             label: "This month",
@@ -115,7 +132,7 @@ export default async function AdminOrdersPage() {
           columns={columns}
           rows={rows}
           noun="order"
-          searchPlaceholder="Search invoice, customer, email…"
+          searchPlaceholder="Search invoice, Booking ID, customer, email…"
           emptyIcon="receipt"
           emptyTitle="No orders yet"
           emptyBody="Completed checkouts will appear here as soon as Stripe confirms the first payment."

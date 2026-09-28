@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import { getSupabase } from "@/lib/supabase";
 import { slugify } from "./format";
 import { toBooster } from "./boosters-db";
-import type { Booster, Team, TeamMember } from "./types";
+import type { Booster, Team } from "./types";
 
 /**
  * Teams, and the two irreversible moments in the game's opening: a gamemaster
@@ -26,28 +26,18 @@ type TeamRow = {
   cached_points: number | string;
   cached_completions: number;
   active: boolean;
+  race_started_at: string | null;
+  race_finished_at: string | null;
   gamemaster: { display_name: string } | null;
   us_boosters: Parameters<typeof toBooster>[0] | null;
-  us_team_members: { user_id: string; us_profiles: { display_name: string } | null }[];
 };
 
 const SELECT = `id, name, slug, color, gamemaster_id, claimed_at, booster_id,
-  booster_drawn_at, cached_points, cached_completions, active,
+  booster_drawn_at, cached_points, cached_completions, active, race_started_at, race_finished_at,
   gamemaster:us_profiles!us_teams_gamemaster_id_fkey(display_name),
-  ${BOOSTER_EMBED},
-  us_team_members(user_id, us_profiles(display_name))`;
+  ${BOOSTER_EMBED}`;
 
 function toTeam(row: TeamRow): Team {
-  const members: TeamMember[] = (row.us_team_members ?? []).map((member) => ({
-    userId: member.user_id,
-    displayName: member.us_profiles?.display_name || "Participant",
-    // Emails are an admin-only detail; the team-facing views never need them,
-    // so the roster query doesn't reach into auth.users for them.
-    email: "",
-  }));
-
-  members.sort((a, b) => a.displayName.localeCompare(b.displayName));
-
   return {
     id: row.id,
     name: row.name,
@@ -61,7 +51,8 @@ function toTeam(row: TeamRow): Team {
     points: Number(row.cached_points),
     stationsCompleted: row.cached_completions,
     active: row.active,
-    members,
+    raceStartedAt: row.race_started_at,
+    raceFinishedAt: row.race_finished_at,
   };
 }
 
@@ -85,6 +76,17 @@ export async function getTeam(id: number): Promise<Team | null> {
   return data ? toTeam(data as unknown as TeamRow) : null;
 }
 
+export async function getTeamForBooking(reference: string): Promise<Team | null> {
+  const { data, error } = await getSupabase()
+    .from("us_teams")
+    .select(SELECT)
+    .eq("slug", teamSlugForBooking(reference))
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data ? toTeam(data as unknown as TeamRow) : null;
+}
+
 /** The team this gamemaster has claimed, or null if they still need to pick one. */
 export async function getTeamForGamemaster(userId: string): Promise<Team | null> {
   const { data, error } = await getSupabase()
@@ -95,17 +97,6 @@ export async function getTeamForGamemaster(userId: string): Promise<Team | null>
 
   if (error) throw new Error(error.message);
   return data ? toTeam(data as unknown as TeamRow) : null;
-}
-
-export async function getTeamForParticipant(userId: string): Promise<Team | null> {
-  const { data } = await getSupabase()
-    .from("us_team_members")
-    .select("team_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (!data) return null;
-  return getTeam(data.team_id as number);
 }
 
 export type ClaimResult =
@@ -217,6 +208,53 @@ export async function drawBooster(teamId: number): Promise<DrawResult> {
   };
 }
 
+/* ----------------------------- Booked teams ------------------------------ */
+
+/**
+ * A paid booking is a team in the station game too. Its us_teams row is made
+ * when the booking is paid, and the two are linked by the Booking ID: a booked
+ * team's slug is its reference, lower-cased ("us-abcd2345"). Slugs are unique,
+ * so that is also what makes creating it safe to repeat.
+ */
+export function teamSlugForBooking(reference: string): string {
+  return reference.toLowerCase();
+}
+
+/** The Booking ID behind a team, or null for a team an organiser added by hand. */
+export function bookingReferenceForTeam(team: { slug: string }): string | null {
+  return /^us-[a-z0-9]{8}$/.test(team.slug) ? team.slug.toUpperCase() : null;
+}
+
+/** Distinct, readable on both the dark game screens and the light console. */
+const BOOKED_TEAM_COLORS = [
+  "#ff5c38", "#2f80ed", "#27ae60", "#9b51e0", "#f2994a",
+  "#eb5757", "#00a3a3", "#d6a300", "#e84393", "#5b6cff",
+];
+
+/**
+ * Makes the booking's station-game team, if it doesn't have one yet. Called on
+ * every delivery of the payment; the second and later calls change nothing,
+ * so an organiser's later edits to the team (its name, colour) are kept.
+ */
+export async function ensureTeamForBooking(booking: {
+  id: number;
+  reference: string;
+  teamName: string;
+}): Promise<void> {
+  const { error } = await getSupabase()
+    .from("us_teams")
+    .upsert(
+      {
+        name: booking.teamName,
+        slug: teamSlugForBooking(booking.reference),
+        color: BOOKED_TEAM_COLORS[booking.id % BOOKED_TEAM_COLORS.length],
+      },
+      { onConflict: "slug", ignoreDuplicates: true }
+    );
+
+  if (error) throw new Error(`Couldn't add ${booking.reference} to the station game: ${error.message}`);
+}
+
 export async function createTeam(input: {
   name: string;
   color: string;
@@ -268,28 +306,5 @@ export async function deleteTeam(id: number): Promise<void> {
   }
 
   const { error } = await db.from("us_teams").delete().eq("id", id);
-  if (error) throw new Error(error.message);
-}
-
-/** Admin-only: puts a participant on a team, or removes them when teamId is null. */
-export async function assignParticipantToTeam(
-  userId: string,
-  teamId: number | null
-): Promise<void> {
-  const db = getSupabase();
-
-  if (teamId === null) {
-    const { error } = await db.from("us_team_members").delete().eq("user_id", userId);
-    if (error) throw new Error(error.message);
-    return;
-  }
-
-  // user_id is the primary key, so this moves a participant between teams in
-  // one statement rather than a delete-then-insert that could briefly place
-  // them on two.
-  const { error } = await db
-    .from("us_team_members")
-    .upsert({ user_id: userId, team_id: teamId }, { onConflict: "user_id" });
-
   if (error) throw new Error(error.message);
 }

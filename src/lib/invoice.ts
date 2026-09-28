@@ -32,22 +32,44 @@ const BRAND = {
   white: "#ffffff",
 };
 
-/** One row per pass when available, falling back to a single summary row for legacy orders. */
+/** Who a pass is for, and its number. */
+function passDetail(item: IssuedPassItem): string {
+  // Number first: the PDF truncates this line with an ellipsis, and a long
+  // name must never be what pushes the pass number out of sight.
+  return [item.passNumber ? `Pass No. ${formatPassNumber(item.passNumber)}` : null, item.registration.fullName]
+    .filter(Boolean)
+    .join("  ·  ");
+}
+
+/**
+ * One row per pass when available, falling back to a single summary row for
+ * legacy orders. An Urban Sprint order is charged once, for the team entry,
+ * and its Platinum Passes follow at no charge — so the lines still add up to
+ * what was paid.
+ */
 export function invoiceLineItemsFor(order: StoredOrder, items: IssuedPassItem[]): InvoiceLineItem[] {
+  if (order.product.kind === "urban_sprint") {
+    return [
+      {
+        label: "Urban Sprint team entry",
+        detail: `${order.product.reference}  ·  ${order.product.description}`,
+        amountCents: order.amountTotal,
+      },
+      ...items.map((item) => ({
+        label: `Traveloop ${item.passName} Pass (included)`,
+        detail: passDetail(item),
+        amountCents: 0,
+      })),
+    ];
+  }
+
   if (items.length === 0) {
     return [{ label: `Traveloop ${order.passName} Pass`, amountCents: order.amountTotal }];
   }
 
   return items.map((item) => ({
     label: `Traveloop ${item.passName} Pass`,
-    // Number first: the PDF truncates this line with an ellipsis, and a long
-    // name must never be what pushes the pass number out of sight.
-    detail: [
-      item.passNumber ? `Pass No. ${formatPassNumber(item.passNumber)}` : null,
-      item.registration.fullName,
-    ]
-      .filter(Boolean)
-      .join("  ·  "),
+    detail: passDetail(item),
     // At list price, so the discounts below can be itemised against it.
     // Passes sold before discounts existed have no list price, and their
     // unit price already is the whole story.
@@ -126,7 +148,15 @@ function escapeHtml(value: string): string {
  * line items. Entries with no data for this order are dropped.
  */
 function bookingDetailsFor(order: StoredOrder): { label: string; value: string }[] {
-  const rows = [{ label: "Pass", value: `Traveloop ${order.passName} Pass` }];
+  const rows =
+    order.product.kind === "urban_sprint"
+      ? [
+          { label: "Product", value: "Urban Sprint team entry" },
+          { label: "Booking ID", value: order.product.reference },
+          { label: "Race", value: order.product.description },
+          { label: "Includes", value: "Traveloop Platinum Pass for every racer" },
+        ]
+      : [{ label: "Pass", value: `Traveloop ${order.passName} Pass` }];
 
   if (order.arrivalDate && order.departureDate) {
     rows.push({

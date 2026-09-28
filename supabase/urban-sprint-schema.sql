@@ -27,7 +27,7 @@
 create table if not exists us_settings (
   id smallint primary key default 1 check (id = 1),
   event_name text not null default 'Urban Sprint',
-  event_tagline text not null default 'One city. Twelve teams. Ninety minutes of chaos.',
+  event_tagline text not null default 'One city. Twelve teams. Three hours of chaos.',
   -- Drives the public landing page's status banner.
   event_status text not null default 'upcoming'
     check (event_status in ('upcoming', 'live', 'paused', 'ended')),
@@ -335,3 +335,281 @@ from us_teams t
 left join us_boosters b on b.id = t.booster_id
 left join us_categories cat on cat.id = b.category_id
 where t.active;
+
+
+-- ---------------------------------------------------------------------------
+-- Team bookings — how a team buys its way into a race.
+-- ---------------------------------------------------------------------------
+-- A booking is one team in one daily time slot, paid for once (RM450 per team
+-- at launch — the price, slot times, team sizes and the five-team capacity all
+-- live in src/lib/urban-sprint/booking-config.ts). Participants are recorded
+-- per person because their details feed the Traveloop Card and the insurance
+-- cover, which are issued per person.
+--
+-- The row is written *before* payment, as a hold: that's what reserves the
+-- team's place while the buyer is on Stripe's page, so a slot can't sell six
+-- places to six people who all started paying for the last one. What counts
+-- toward a slot's capacity:
+--
+--   pending     — a hold, until hold_expires_at. Stripe's session expires just
+--                 before it does, so a hold never outlives its checkout.
+--   processing  — checkout completed but the money hasn't settled yet (FPX).
+--                 Counts with no expiry: the buyer has done everything asked.
+--   paid        — a confirmed team.
+--
+-- and what doesn't: expired (the checkout was abandoned or cancelled), failed
+-- (a delayed payment never settled) and cancelled (reserved for organisers).
+create extension if not exists pgcrypto with schema extensions;
+
+-- The reference a team quotes: "US-" and eight characters from the same
+-- misread-proof alphabet as pass numbers (see generate_pass_number in
+-- schema.sql). It also authorises releasing an unpaid checkout, so it is
+-- random rather than sequential.
+create or replace function public.us_generate_booking_reference()
+returns text
+language plpgsql
+volatile
+set search_path = ''
+as $$
+declare
+  alphabet constant text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  bytes bytea := extensions.gen_random_bytes(8);
+  result text := 'US-';
+begin
+  for i in 0..7 loop
+    result := result || substr(alphabet, get_byte(bytes, i) % 32 + 1, 1);
+  end loop;
+  return result;
+end;
+$$;
+
+create table if not exists us_bookings (
+  id bigint generated always as identity primary key,
+  reference text not null unique default public.us_generate_booking_reference(),
+  -- Malaysian wall-clock date and start time, like experience_bookings: a
+  -- 9 AM race is at 9 AM in George Town wherever the viewer is.
+  session_date date not null,
+  start_time time not null,
+  team_name text not null,
+  team_size integer not null check (team_size > 0),
+  -- What was charged, fixed at booking time so a later price change can't
+  -- rewrite what a team paid.
+  amount_cents integer not null check (amount_cents >= 0),
+  currency text not null default 'myr',
+  status text not null default 'pending'
+    check (status in ('pending', 'processing', 'paid', 'expired', 'failed', 'cancelled')),
+  hold_expires_at timestamptz,
+  stripe_session_id text unique,
+  payment_intent_id text,
+  -- Whoever paid, as Stripe captured them. Not necessarily a participant:
+  -- there is no team leader, so the payer is just the person with the card.
+  payer_email text,
+  payer_name text,
+  payer_phone text,
+  -- Which wording of the "I have read and understand" declaration was ticked.
+  -- The final text is still to come from Traveloop; recording the version
+  -- keeps it clear what each team agreed to once it changes.
+  terms_version text not null,
+  terms_accepted_at timestamptz not null,
+  paid_at timestamptz,
+  -- Same shape as orders.confirmation_*: null sent_at on a paid booking means
+  -- the email hasn't reached anyone yet, and the error says why.
+  confirmation_sent_at timestamptz,
+  confirmation_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table us_bookings enable row level security;
+
+create index if not exists us_bookings_slot_idx
+  on us_bookings (session_date, start_time)
+  where status in ('pending', 'processing', 'paid');
+
+-- One row per person on the team, in the order they were entered.
+create table if not exists us_booking_participants (
+  id bigint generated always as identity primary key,
+  booking_id bigint not null references us_bookings(id) on delete cascade,
+  position smallint not null,
+  -- As printed on the MyKad or passport: the Traveloop Card and the insurer
+  -- both match on it.
+  full_name text not null,
+  document_type text not null check (document_type in ('mykad', 'passport')),
+  -- MyKad numbers are stored normalised as YYMMDD-PB-####; passports upper-case.
+  document_number text not null,
+  nationality text not null,
+  sex text not null check (sex in ('male', 'female')),
+  age smallint not null check (age between 1 and 120),
+  email text not null,
+  phone text not null,
+  created_at timestamptz not null default now(),
+  unique (booking_id, position)
+);
+
+alter table us_booking_participants enable row level security;
+
+-- Five teams a slot, enforced here rather than trusted to the app: the app's
+-- own check only reads a count, and two buyers reading "one place left" at the
+-- same moment would both be told yes. The advisory lock makes every booking
+-- for one slot take turns, so the second one counts the first.
+--
+-- Only a *new* claim on a slot is checked. A payment is never refused, even
+-- one arriving for a hold that had already lapsed — by then the money has
+-- moved, and turning a paying team away at the webhook would be worse than one
+-- slot running a team over. Fulfilment logs loudly when that happens.
+--
+-- Keep slot_capacity in sync with SLOT_CAPACITY in booking-config.ts.
+create or replace function us_check_slot_capacity()
+returns trigger as $$
+declare
+  slot_capacity constant integer := 5;
+  taken integer;
+begin
+  if new.status not in ('pending', 'processing', 'paid') then
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE'
+    and old.session_date = new.session_date
+    and old.start_time = new.start_time
+    and (
+      -- Already holding its place.
+      old.status in ('pending', 'processing', 'paid')
+      -- Or money arriving for a hold that had lapsed: take it regardless.
+      or new.status in ('processing', 'paid')
+    ) then
+    return new;
+  end if;
+
+  perform pg_advisory_xact_lock(
+    hashtextextended('us_slot:' || new.session_date::text || ' ' || new.start_time::text, 0)
+  );
+
+  select count(*) into taken
+  from us_bookings
+  where session_date = new.session_date
+    and start_time = new.start_time
+    and id is distinct from new.id
+    and (
+      status in ('processing', 'paid')
+      or (status = 'pending' and hold_expires_at > now())
+    );
+
+  if taken >= slot_capacity then
+    raise exception 'us_slot_full' using errcode = 'P0001';
+  end if;
+
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists us_bookings_capacity_check on us_bookings;
+create trigger us_bookings_capacity_check
+  before insert or update on us_bookings
+  for each row execute function us_check_slot_capacity();
+
+-- Places taken per slot, by the same rule the trigger counts with. The booking
+-- page reads this rather than the rows, which carry personal details it has no
+-- business fetching. security_invoker so the view doesn't hand the anon key
+-- what the tables' RLS denies it.
+create or replace view us_slot_bookings
+with (security_invoker = true) as
+select session_date, start_time, count(*)::integer as teams
+from us_bookings
+where status in ('processing', 'paid')
+   or (status = 'pending' and hold_expires_at > now())
+group by session_date, start_time;
+
+
+-- ---------------------------------------------------------------------------
+-- Campaign wording Traveloop is still finalising.
+-- ---------------------------------------------------------------------------
+-- Editable in the console (Overview > Booking wording) so a change of wording
+-- is not a deploy. consent_text may carry [label](/path) links, which the
+-- booking form renders as links and nothing else — it is never treated as
+-- HTML. consent_version is bumped by the app whenever the wording changes, and
+-- every booking records both the version and the exact text it accepted.
+alter table us_settings add column if not exists rules_text text not null
+  default 'Rules & Regulations will be confirmed by Traveloop before your race.';
+alter table us_settings add column if not exists consent_text text not null
+  default 'I have read and understand the [Terms & Conditions](/terms) and [Privacy Notice](/privacy), and I consent to Traveloop using the information submitted for marketing purposes, where applicable.';
+alter table us_settings add column if not exists consent_version text not null
+  default 'draft-2026-09';
+-- How many teams the public results board may show; 0 means every team.
+alter table us_settings add column if not exists leaderboard_limit integer not null
+  default 200 check (leaderboard_limit >= 0);
+
+alter table us_bookings add column if not exists terms_text text;
+
+
+-- ---------------------------------------------------------------------------
+-- Platinum Passes — every racer gets one.
+-- ---------------------------------------------------------------------------
+-- A paid booking becomes a Traveloop order too (orders.product =
+-- 'urban_sprint', session_id = us_bookings.stripe_session_id), with a
+-- Platinum Pass issued to each participant exactly as a pass purchase issues
+-- them. The pass's travel-insurance registration needs a little more than
+-- the race does: the trip it covers, a home address and, optionally, an
+-- emergency contact. Nullable only for participants booked before this.
+alter table us_booking_participants add column if not exists arrival_date date;
+alter table us_booking_participants add column if not exists departure_date date;
+alter table us_booking_participants add column if not exists address text;
+alter table us_booking_participants add column if not exists emergency_contact_name text;
+alter table us_booking_participants add column if not exists emergency_contact_phone text;
+alter table us_booking_participants add column if not exists emergency_contact_relationship text;
+
+
+-- ---------------------------------------------------------------------------
+-- Race results — entered by staff against the Booking ID after each race.
+-- ---------------------------------------------------------------------------
+-- A result lives on the booking itself: the Booking ID is what links booking,
+-- participants, score, timing and photos, so there is no second record to
+-- keep in step. Both numbers are required before a team is ranked.
+alter table us_bookings add column if not exists result_points numeric(10, 2)
+  check (result_points >= 0);
+alter table us_bookings add column if not exists result_seconds integer
+  check (result_seconds > 0);
+alter table us_bookings add column if not exists result_entered_at timestamptz;
+alter table us_bookings add column if not exists result_entered_by uuid
+  references us_profiles(user_id) on delete set null;
+
+-- Wakes open leaderboards only when a result changes — not on every hold,
+-- expiry and payment that also update this table.
+drop trigger if exists us_bookings_results_revision on us_bookings;
+create trigger us_bookings_results_revision
+  after update of result_points, result_seconds on us_bookings
+  for each statement execute function us_touch_revision();
+
+-- The ranking, decided once here so the public board, "Check my ranking" and
+-- the console can never disagree: more points first, then the faster time.
+-- rank() rather than row_number(), so teams level on both genuinely tie.
+create or replace view us_results_board
+with (security_invoker = true) as
+select
+  b.id,
+  b.reference,
+  b.team_name,
+  b.team_size,
+  b.session_date,
+  b.start_time,
+  b.result_points as points,
+  b.result_seconds as seconds,
+  b.result_entered_at,
+  rank() over (order by b.result_points desc, b.result_seconds asc) as rank
+from us_bookings b
+where b.status = 'paid'
+  and b.result_points is not null
+  and b.result_seconds is not null;
+
+
+-- ---------------------------------------------------------------------------
+-- The race clock — started and stopped by the team's gamemaster.
+-- ---------------------------------------------------------------------------
+-- A race is 180 minutes (RACE_MINUTES in lib/urban-sprint/race-clock.ts). The
+-- gamemaster starts the clock after drawing the booster and stops it with
+-- Finish; a race nobody finishes ends itself at 180 minutes. Points come from
+-- the stations confirmed in between, and on finishing, the points and time
+-- are written to the booking's result, so every team, whatever day it raced,
+-- is ranked on the one board: more points first, then the shorter time.
+alter table us_teams add column if not exists race_started_at timestamptz;
+alter table us_teams add column if not exists race_finished_at timestamptz;
